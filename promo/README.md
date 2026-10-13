@@ -18,8 +18,10 @@ GitHub release. The rendered file is not kept in git.
 | Anywhere | The game in a desktop browser and on a phone, plus where to get it |
 | Outro | Logo, name and the call to action: `noartem.github.io/block-baster` |
 
-The soundtrack is synthesised from scratch, the same way the game makes its sounds (no samples). The
-game's own sound effects play exactly on the frames where the moves happen.
+The soundtrack is the game's own adaptive music ([`src/audio/music.ts`](../src/audio/music.ts)),
+rendered offline from the built game. It follows the video the way it follows a game: lofi over the
+intro, livelier with the gameplay, house through the styles and features, and full EDM from the best
+score on. The game's sound effects play on top, exactly on the frames where the moves happen.
 
 ## Layout
 
@@ -27,7 +29,8 @@ game's own sound effects play exactly on the frames where the moves happen.
 promo/
   capture/capture.mjs   Playwright: stages the game, captures the screenshots and the gameplay clip
   capture/fonts.py      converts the game's Baloo 2 web font to TTF for fframes
-  audio/music.py        synthesises media/music.wav (music + game sound effects)
+  audio/soundtrack.mjs  Playwright: renders the game's adaptive music along an intensity curve
+  audio/music.py        builds media/music.wav (that music + the game's sound effects)
   media/                everything the video uses (screenshots, gameplay.mp4, fonts, music)
   src/main.rs           the fframes Video: background, shared defs, scene list, encoder settings
   src/draw.rs           easing, game-style bevelled blocks, logo, phone and browser mockups
@@ -53,7 +56,8 @@ python3 promo/audio/music.py
 
 If the gameplay clip changes length, update `CLIP_LENGTH` in `src/scenes/gameplay.rs` and `CLIP_FRAMES`
 in `audio/music.py`. If the moves happen on different frames, update the sound-effect frames in
-`audio/music.py`. Scene lengths in `audio/music.py` must match the `DURATION` of each scene.
+`audio/music.py`. Scene lengths in `audio/music.py` must match the `DURATION` of each scene. How the
+music builds up over the scenes is set by `INTENSITY` there.
 
 ## Rendering
 
