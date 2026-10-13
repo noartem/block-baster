@@ -1,8 +1,11 @@
-name: CI
+name: CI/CD
 
+# Pull requests: typecheck, tests and an APK build (downloadable as a workflow artifact).
+# Push to main: the same, then publish a GitHub Release with the APK and deploy the web version.
+# Push a v* tag: publish a release under that tag.
 on:
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -12,7 +15,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a run on main halfway through publishing a release.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -40,8 +44,8 @@ jobs:
     name: Android APK
     needs: test
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     env:
       HAS_RELEASE_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
@@ -56,6 +60,8 @@ jobs:
           java-version: 21
           cache: gradle
       # ubuntu-latest ships the Android SDK (ANDROID_HOME); Gradle fetches any missing platform.
+      - id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - name: Build web app and sync into the Android project
         run: npm run android:sync
@@ -85,9 +91,68 @@ jobs:
           name: block-baster-apk
           path: block-baster.apk
           retention-days: 30
-      - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+
+  release:
+    name: GitHub Release
+    needs: android
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
         with:
+          name: block-baster-apk
+      - name: Pick release tag
+        id: tag
+        env:
+          VERSION: ${{ needs.android.outputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "name=Block Baster $GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v$VERSION-build.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "name=Block Baster $VERSION (build $GITHUB_RUN_NUMBER)" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
           files: block-baster.apk
+          make_latest: true
           generate_release_notes: true
+          body: |
+            **Install on Android:** download `block-baster.apk` below, open it on your phone and allow installing apps from this source.
+
+            Built from ${{ github.sha }}.
+
+  deploy-web:
+    name: Deploy web version
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -13,8 +13,8 @@ Runs in any modern browser (installable as a PWA, works offline) and as an Andro
 ## Play
 
 - **Web:** once GitHub Pages is enabled (see below), the game is at `https://noartem.github.io/block-baster/`.
-- **Android:** download `block-baster.apk` from the [Releases](https://github.com/noartem/block-baster/releases) page
-  (or from the *Android APK* artifact of any CI run), open it on your phone and allow installing from unknown sources.
+- **Android:** download the [latest APK](https://github.com/noartem/block-baster/releases/latest/download/block-baster.apk)
+  (all builds are on the [Releases](https://github.com/noartem/block-baster/releases) page), open it on your phone and allow installing from unknown sources.
 
 ## How to play
 
@@ -65,8 +65,16 @@ npm run android:apk
 # -> android/app/build/outputs/apk/release/app-release.apk
 ```
 
-Every push runs the **CI** workflow, which tests the game and uploads the APK as an artifact.
-Pushing a tag like `v1.0.0` also creates a GitHub Release with the APK attached.
+The **CI/CD** workflow (`.github/workflows/ci.yml`) works like this:
+
+| Trigger | What happens |
+| --- | --- |
+| Pull request | typecheck, unit + browser tests, APK build (downloadable as the `block-baster-apk` workflow artifact) |
+| Push to `main` | the same, then a GitHub Release `v<version>-build.<run>` with `block-baster.apk`, and the web version is deployed to GitHub Pages |
+| Push a `v*` tag | the same checks, then a release under that tag |
+
+The APK `versionCode` is the workflow run number, so every release installs over the previous one.
+Bump `version` in `package.json` to change the version name.
 
 **Signing.** Without extra setup, APKs are signed with the public key in `android/app/debug.keystore`,
 so new builds install over older ones. For official releases, create your own private key and add it as
@@ -82,7 +90,7 @@ Android refuses to update an app with an APK signed by a different key, so unins
 
 ### Web hosting
 
-The `Deploy web version` workflow publishes `dist/` to GitHub Pages on every push to `main`.
+Every push to `main` publishes `dist/` to GitHub Pages (after the tests pass).
 Enable it once under **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 The build uses relative paths, so `dist/` can also be uploaded to any static host.
 
