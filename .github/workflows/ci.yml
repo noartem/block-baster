@@ -55,7 +55,7 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest ships the Android SDK (ANDROID_HOME); Gradle fetches any missing platform.
       - run: npm ci
       - name: Build web app and sync into the Android project
         run: npm run android:sync
