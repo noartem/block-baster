@@ -2,22 +2,25 @@ import type { Sound } from './audio/sound';
 import { idx, previewLines } from './game/board';
 import { Game, type PlaceResult } from './game/game';
 import { shapeById } from './game/shapes';
+import { TOUCH_GAIN, nearestFit } from './input';
 import { exitApp, isNative, onBackButton, vibrate } from './platform';
 import { type Layout, computeLayout, slotAt } from './render/layout';
 import { colorFor } from './render/palette';
 import { CLEAR_DURATION, GAME_OVER_FILL, type DragView, Renderer, type Scene, trayPiecePosition } from './render/renderer';
-import { clearSpriteCache } from './render/sprites';
+import { clearSpriteCache, spriteCacheSize } from './render/sprites';
 import { type Settings, storage } from './storage';
 
 interface DragState {
   slot: number;
   pointerId: number;
-  /** Pointer position. */
+  /** Last pointer position. */
   px: number;
   py: number;
-  /** Offset from the pointer to the piece's top-left corner at full size. */
-  offX: number;
-  offY: number;
+  /** Top-left corner of the piece at full size. */
+  x: number;
+  y: number;
+  /** How far the piece moves per pixel of pointer movement. */
+  gain: { x: number; y: number };
   /** Where the piece started (in the tray), for the pick-up animation. */
   from: { x: number; y: number; cell: number };
   start: number;
@@ -141,7 +144,9 @@ export class BlockBasterApp {
       this.shownScore = Math.abs(diff) <= 1 ? target : this.shownScore + Math.ceil(Math.abs(diff) * 0.18) * Math.sign(diff);
       $('score').textContent = String(this.shownScore);
     }
-    $('best').textContent = String(Math.max(this.best, this.game.score));
+    // Runs every frame while dragging; only touch the DOM when the text changes.
+    const best = String(Math.max(this.best, this.game.score));
+    if ($('best').textContent !== best) $('best').textContent = best;
   }
 
   // ---------------------------------------------------------------------------
@@ -171,14 +176,15 @@ export class BlockBasterApp {
       const w = piece.shape.cols * cell;
       const h = piece.shape.rows * cell;
       // Touch: lift the piece above the finger so it stays visible. Mouse: grab the centre.
-      const lift = e.pointerType === 'mouse' ? -h / 2 : -h - cell * 1.1;
+      const mouse = e.pointerType === 'mouse';
       this.drag = {
         slot,
         pointerId: e.pointerId,
         px: x,
         py: y,
-        offX: -w / 2,
-        offY: lift,
+        x: x - w / 2,
+        y: mouse ? y - h / 2 : y - h - cell * 1.1,
+        gain: mouse ? { x: 1, y: 1 } : TOUCH_GAIN,
         from: trayPiecePosition(this.layout, slot, piece.shape),
         start: performance.now(),
       };
@@ -188,17 +194,23 @@ export class BlockBasterApp {
       this.invalidate();
     });
     c.addEventListener('pointermove', (e) => {
-      if (!this.drag || e.pointerId !== this.drag.pointerId) return;
+      const d = this.drag;
+      if (!d || e.pointerId !== d.pointerId) return;
       const { x, y } = point(e);
-      this.drag.px = x;
-      this.drag.py = y;
+      const shape = this.game.tray[d.slot]!.shape;
+      const w = shape.cols * this.layout.cell;
+      const h = shape.rows * this.layout.cell;
+      // Move by the scaled delta and keep the piece's centre on screen, so it
+      // follows the finger back at once after overshooting an edge.
+      d.x = Math.min(this.layout.width - w / 2, Math.max(-w / 2, d.x + (x - d.px) * d.gain.x));
+      d.y = Math.min(this.layout.height - h / 2, Math.max(-h / 2, d.y + (y - d.py) * d.gain.y));
+      d.px = x;
+      d.py = y;
       this.invalidate();
     });
+    // The drop uses the last move: fingers often slide a little while lifting off.
     const end = (e: PointerEvent, cancelled: boolean) => {
       if (!this.drag || e.pointerId !== this.drag.pointerId) return;
-      const { x, y } = point(e);
-      this.drag.px = x;
-      this.drag.py = y;
       this.drop(cancelled);
     };
     c.addEventListener('pointerup', (e) => end(e, false));
@@ -206,19 +218,11 @@ export class BlockBasterApp {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  /** Top-left of the dragged piece at full size (where it will snap from). */
-  private dragTopLeft(d: DragState) {
-    return { x: d.px + d.offX, y: d.py + d.offY };
-  }
-
+  /** Where the dragged piece would land: the closest spot near it where it fits. */
   private snapTarget(d: DragState) {
-    const piece = this.game.tray[d.slot];
-    if (!piece) return null;
-    const { x, y } = this.dragTopLeft(d);
-    const c = Math.round((x - this.layout.boardX) / this.layout.cell);
-    const r = Math.round((y - this.layout.boardY) / this.layout.cell);
-    if (!this.game.canPlace(d.slot, r, c)) return null;
-    return { r, c };
+    if (!this.game.tray[d.slot]) return null;
+    const { boardX, boardY, cell } = this.layout;
+    return nearestFit((d.y - boardY) / cell, (d.x - boardX) / cell, (r, c) => this.game.canPlace(d.slot, r, c));
   }
 
   private dragView(now: number): DragView | null {
@@ -227,7 +231,7 @@ export class BlockBasterApp {
     const piece = this.game.tray[d.slot];
     if (!piece) return null;
     const t = Math.min(1, (now - d.start) / PICKUP_MS);
-    const to = this.dragTopLeft(d);
+    const to = { x: d.x, y: d.y };
     const lerp = (a: number, b: number) => a + (b - a) * t;
     const target = this.snapTarget(d);
     return {
@@ -250,7 +254,7 @@ export class BlockBasterApp {
     } else if (view) {
       // Fly back to the tray.
       this.scene.flying = { piece: view.piece, from: { x: view.x, y: view.y, cell: view.cell }, slot: d.slot, start: performance.now(), duration: 200 };
-      const { x, y } = this.dragTopLeft(d);
+      const { x, y } = d;
       const overBoard =
         x + view.piece.shape.cols * this.layout.cell > this.layout.boardX && x < this.layout.boardX + this.layout.boardSize && y < this.layout.boardY + this.layout.boardSize;
       if (overBoard) this.sound.invalid();
@@ -379,6 +383,12 @@ export class BlockBasterApp {
     this.game.tray = ids.map((id, i) => (id ? { shape: shapeById(id), color: i + 1 } : null));
     this.syncScene();
     this.invalidate();
+  }
+
+  /** Sizes of everything that accumulates while playing (for leak tests). */
+  debugStats() {
+    const s = this.scene;
+    return { sprites: spriteCacheSize(), particles: s.particles.length, texts: s.texts.length, animating: this.renderer.isAnimating(s) };
   }
 
   save(): void {

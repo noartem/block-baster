@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { TOUCH_GAIN } from '../../src/input';
 
 async function open(page: Page, query = '?seed=12345&reset') {
   const errors: string[] = [];
@@ -64,7 +65,7 @@ test('drags a piece onto the board with the mouse', async ({ page }) => {
   expect(state).toEqual({ empty: true, moves: 1 });
 });
 
-test('touch drags lift the piece above the finger', async ({ page }) => {
+test('touch drags lift the piece above the finger and move it faster', async ({ page }) => {
   await open(page);
   const move = (await findMove(page))!;
   const box = (await page.locator('#game').boundingBox())!;
@@ -78,11 +79,15 @@ test('touch drags lift the piece above the finger', async ({ page }) => {
       bubbles: true,
     });
   await fire('pointerdown', move.from.x, move.from.y);
-  // The finger sits below the piece: centred horizontally, 1.1 cells under its bottom edge.
-  const fx = move.topLeft.x + move.w / 2;
-  const fy = move.topLeft.y + move.h + move.cell * 1.1;
+  // The piece starts centred above the finger, its bottom edge 1.1 cells higher,
+  // then moves TOUCH_GAIN times as far as the finger does.
+  const startX = move.from.x - move.w / 2;
+  const startY = move.from.y - move.h - move.cell * 1.1;
+  const fx = move.from.x + (move.topLeft.x - startX) / TOUCH_GAIN.x;
+  const fy = move.from.y + (move.topLeft.y - startY) / TOUCH_GAIN.y;
   await fire('pointermove', fx, fy);
-  await fire('pointerup', fx, fy);
+  // Lifting the finger may slide it a little; the drop keeps the last move's spot.
+  await fire('pointerup', fx + move.cell, fy + move.cell);
   await expect(page.locator('#score')).toHaveText(String(move.size));
 });
 
