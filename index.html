@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2b3a99" />
+    <meta name="description" content="Block Baster: a free, open-source, ad-free block puzzle game. Drag blocks onto the board and clear rows and columns." />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <title>Block Baster</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="hud">
+        <div class="best" title="Best score">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 11H5L3 7z" /></svg>
+          <span id="best">0</span>
+        </div>
+        <div class="score" id="score" aria-live="polite">0</div>
+        <button class="icon-btn" id="menu-btn" aria-label="Menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+      </header>
+      <main class="stage">
+        <canvas id="game" aria-label="Game board. Drag pieces from the tray onto the board."></canvas>
+      </main>
+    </div>
+
+    <div class="overlay" id="menu" hidden>
+      <div class="card" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+        <h2 id="menu-title">Paused</h2>
+        <button class="btn primary" id="resume-btn">Resume</button>
+        <button class="btn" id="restart-btn">New game</button>
+        <div class="toggles">
+          <label class="toggle"><input type="checkbox" id="sound-toggle" /><span>Sound</span></label>
+          <label class="toggle"><input type="checkbox" id="haptics-toggle" /><span>Vibration</span></label>
+        </div>
+        <details class="help">
+          <summary>How to play</summary>
+          <p>Drag the pieces onto the 8×8 board. Fill a whole row or column to clear it. Clear several lines at once, or keep clearing on consecutive turns, for combo bonuses. The game ends when none of your pieces fit.</p>
+        </details>
+        <button class="btn" id="exit-btn" hidden>Exit</button>
+        <p class="about">Free &amp; open source · no ads · no tracking<br /><a href="https://github.com/noartem/block-baster" target="_blank" rel="noopener">github.com/noartem/block-baster</a> · v<span id="version"></span></p>
+      </div>
+    </div>
+
+    <div class="overlay" id="gameover" hidden>
+      <div class="card" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+        <h2 id="gameover-title">No more space!</h2>
+        <p class="record" id="record" hidden>New best score!</p>
+        <div class="final-label">Score</div>
+        <div class="final-score" id="final-score">0</div>
+        <div class="final-best">Best <span id="final-best">0</span></div>
+        <button class="btn primary" id="again-btn">Play again</button>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
