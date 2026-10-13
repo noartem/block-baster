@@ -1,0 +1,16 @@
+[package]
+name = "block-baster-promo"
+version = "0.1.0"
+edition = "2024"
+description = "Marketing video for Block Baster, rendered with fframes"
+license = "MIT"
+publish = false
+
+[dependencies]
+# `h264` encodes the final video with libx264 (needs the x264 development package installed).
+fframes = { version = "=1.2.0", features = ["cli", "compile-time-svgtree", "h264", "libav-agree-gpl"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+codegen-units = 16
