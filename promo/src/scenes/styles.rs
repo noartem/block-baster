@@ -11,11 +11,11 @@ pub const DURATION: f32 = 5.8;
 /// Screenshot, name and unlock score of each level (src/render/styles.ts).
 const LEVELS: [(&str, &str, &str); 6] = [
     ("screen-style-0.png", "Classic", "Start"),
-    ("screen-style-1.png", "Candy", "50k"),
-    ("screen-style-2.png", "Gems", "100k"),
-    ("screen-style-3.png", "Neon", "200k"),
-    ("screen-style-4.png", "Aurora", "500k"),
-    ("screen-style-5.png", "Legendary", "1M"),
+    ("screen-style-1.png", "Candy", "10k"),
+    ("screen-style-2.png", "Gems", "50k"),
+    ("screen-style-3.png", "Neon", "100k"),
+    ("screen-style-4.png", "Aurora", "200k"),
+    ("screen-style-5.png", "Legendary", "500k"),
 ];
 
 /// When the phones land, one after another.

@@ -15,8 +15,10 @@ export const W_SCORE = 0.65;
 export const W_SPEED = 0.35;
 
 /** Score at which the music reaches full EDM: the best score, within these bounds. */
-export const TARGET_MIN = 1000;
-export const TARGET_MAX = 4000;
+export const TARGET_MIN = 4000;
+export const TARGET_MAX = 15000;
+/** Above 1 the music lingers in lofi longer and builds up faster near the target. */
+export const PROGRESS_CURVE = 1.4;
 
 /** Moves within this window count towards the action speed... */
 export const SPEED_WINDOW_MS = 6000;
@@ -26,7 +28,7 @@ export const SPEED_MAX_MOVES = 5;
 export const SPEED_PER_COMBO = 0.1;
 
 /** Smoothing time constants, in seconds. Speed rises fast and falls slowly so a short pause doesn't drop the music back to lofi. */
-export const SMOOTH_SCORE = 2;
+export const SMOOTH_SCORE = 5;
 export const SMOOTH_SPEED_UP = 0.35;
 export const SMOOTH_SPEED_DOWN = 3.3;
 
@@ -38,7 +40,7 @@ export const ramp = (x: number, a: number, b: number): number => clamp01((x - a)
 /** How far the score has come towards the full-energy target, 0..1. */
 export function scoreProgress(score: number, best: number): number {
   const target = Math.min(TARGET_MAX, Math.max(TARGET_MIN, best));
-  return clamp01(score / target);
+  return clamp01(score / target) ** PROGRESS_CURVE;
 }
 
 /** Overall intensity 0..1: progress sets the stage, speed adds energy on top. */

@@ -8,16 +8,28 @@ import { audioContext } from './context';
  */
 type Wave = OscillatorType;
 
+const MASTER = 0.5;
+
 const DEFAULT_PROFILE: SoundProfile = { lead: 'square', root: 392, scale: [0, 4, 7, 12, 16, 19, 24], echo: 0, bell: false, pad: false, thud: 180 };
 
 export class Sound {
-  enabled = true;
   profile: SoundProfile = DEFAULT_PROFILE;
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   /** Input of the echo effect; tones send part of their signal here. */
   private echoIn: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private level = 1;
+
+  /** Volume 0..1 (0 = silent), on a perceptual curve. */
+  get volume(): number {
+    return this.level;
+  }
+
+  set volume(v: number) {
+    this.level = Math.min(1, Math.max(0, v));
+    if (this.ctx && this.master) this.master.gain.setTargetAtTime(MASTER * this.level ** 2, this.ctx.currentTime, 0.02);
+  }
 
   /** Must be called from a user gesture before the first sound can play. */
   unlock(): void {
@@ -25,7 +37,7 @@ export class Sound {
       this.ctx = audioContext();
       if (!this.ctx) return;
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = MASTER * this.level ** 2;
       this.master.connect(this.ctx.destination);
       // Feedback delay for the echo of higher style tiers.
       const delay = this.ctx.createDelay(1);
@@ -53,7 +65,7 @@ export class Sound {
   }
 
   private ready(): AudioContext | null {
-    return this.enabled && this.ctx && this.ctx.state === 'running' ? this.ctx : null;
+    return this.level > 0 && this.ctx && this.ctx.state === 'running' ? this.ctx : null;
   }
 
   private tone(freq: number, start: number, dur: number, opts: { type?: Wave; vol?: number; to?: number; attack?: number; echo?: number; detune?: number } = {}) {

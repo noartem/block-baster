@@ -5,12 +5,12 @@ import { TIERS, formatScore, nextTier, styleFor, tierFor } from '../../src/rende
 import { boardFrom } from './helpers';
 
 describe('styles', () => {
-  it('unlocks tiers at 50k, 100k, 200k, 500k and 1M', () => {
-    expect(TIERS.map((t) => t.minScore)).toEqual([0, 50_000, 100_000, 200_000, 500_000, 1_000_000]);
+  it('unlocks tiers at 10k, 50k, 100k, 200k and 500k', () => {
+    expect(TIERS.map((t) => t.minScore)).toEqual([0, 10_000, 50_000, 100_000, 200_000, 500_000]);
     expect(tierFor(0).name).toBe('Classic');
-    expect(tierFor(49_999).level).toBe(0);
-    expect(tierFor(50_000).level).toBe(1);
-    expect(tierFor(199_999).level).toBe(2);
+    expect(tierFor(9_999).level).toBe(0);
+    expect(tierFor(10_000).level).toBe(1);
+    expect(tierFor(99_999).level).toBe(2);
     expect(tierFor(5_000_000).name).toBe('Legendary');
     expect(nextTier(tierFor(5_000_000))).toBeNull();
   });
@@ -20,7 +20,7 @@ describe('styles', () => {
     expect(styleFor(0, 0).key).toBe('0.0');
     expect(styleFor(0, 1).key).toBe('0.1');
     expect(styleFor(0, n).key).toBe('0.0');
-    expect(styleFor(120_000, 2).key).toBe('2.2');
+    expect(styleFor(60_000, 2).key).toBe('2.2');
   });
 
   it('gives every variant seven valid block colours and hex palette colours', () => {
