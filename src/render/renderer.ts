@@ -92,6 +92,8 @@ export class Renderer {
   private boardCache: HTMLCanvasElement | null = null;
   private boardCacheKey = '';
   private dpr = 1;
+  /** Blocks of every size are drawn from one sprite per colour at board-cell size. */
+  private spriteSize = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -116,6 +118,7 @@ export class Renderer {
     const { ctx, canvas } = this;
     const { layout, dpr, now } = scene;
     this.dpr = dpr;
+    this.spriteSize = layout.cell;
     const w = Math.round(layout.width * dpr);
     const h = Math.round(layout.height * dpr);
     if (canvas.width !== w || canvas.height !== h) {
@@ -253,7 +256,9 @@ export class Renderer {
 
   private blit(color: number, x: number, y: number, size: number, dpr: number, alpha = 1, scale = 1): void {
     const { ctx } = this;
-    const sprite = blockSprite(color, size, dpr);
+    // Animated pieces change size every frame; caching a sprite per size would
+    // create hundreds of canvases, so they all scale the board-sized one.
+    const sprite = blockSprite(color, this.spriteSize, dpr);
     const s = size * scale;
     const o = (size - s) / 2;
     if (alpha !== 1) ctx.globalAlpha = alpha;

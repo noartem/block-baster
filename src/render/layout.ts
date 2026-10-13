@@ -44,7 +44,11 @@ export function computeLayout(width: number, height: number): Layout {
   const slots: Slot[] = [];
   for (let i = 0; i < TRAY_SIZE; i++) {
     const x = trayLeft + slotW * i;
-    slots.push({ cx: x + slotW / 2, cy: trayTop + trayH / 2, x, y: trayTop - gap / 2, w: slotW, h: trayH + gap });
+    // Hit areas reach the screen edges and bottom, so small pieces are easy to grab.
+    const left = i === 0 ? 0 : x;
+    const right = i === TRAY_SIZE - 1 ? width : x + slotW;
+    const top = trayTop - gap / 2;
+    slots.push({ cx: x + slotW / 2, cy: trayTop + trayH / 2, x: left, y: top, w: right - left, h: Math.max(trayH + gap, height - top) });
   }
   return { width, height, cell, boardX, boardY, boardSize, trayCell, slots };
 }

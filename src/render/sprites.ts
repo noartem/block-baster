@@ -18,6 +18,11 @@ export function blockSprite(color: number, size: number, dpr: number): HTMLCanva
   return sprite;
 }
 
+/** Number of cached sprites (for leak tests). */
+export function spriteCacheSize(): number {
+  return cache.size;
+}
+
 export function clearSpriteCache(): void {
   cache.clear();
 }
