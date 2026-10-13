@@ -33,6 +33,7 @@ The game ends when nothing fits.
 
 - 🎯 **Fair**: every new set of pieces can always be placed somehow
 - 💥 Juicy effects, synthesized sounds and haptics
+- 🎵 Music that plays along: calm lofi at the start, building up to EDM as your score grows and you play faster
 - ✨ Six style levels unlocked at 50k, 100k, 200k, 500k and 1M points, each with new blocks, effects, fonts and sounds; clearing the whole board switches the colours
 - 💾 Your game and best score are saved automatically
 - 📴 Works offline, installs as an app on any device
@@ -65,7 +66,7 @@ npm run screenshots   # regenerate the README media into screenshots/
 npm run android:apk   # build the APK (needs JDK 21 + Android SDK)
 ```
 
-Everything is drawn and synthesized by code: blocks, icons and splash screens come from [`scripts/generate-assets.mjs`](scripts/generate-assets.mjs), and the sounds are generated in [`src/audio/sound.ts`](src/audio/sound.ts).
+Everything is drawn and synthesized by code: blocks, icons and splash screens come from [`scripts/generate-assets.mjs`](scripts/generate-assets.mjs), the sounds are generated in [`src/audio/sound.ts`](src/audio/sound.ts) and the music in [`src/audio/music.ts`](src/audio/music.ts).
 `?seed=123` starts a reproducible game and `?reset` clears saved data.
 
 <details>
@@ -80,7 +81,7 @@ Everything is drawn and synthesized by code: blocks, icons and splash screens co
 | `v*` tag | the same checks, then a release under that tag |
 
 The images in this README are captured from the real game in CI ([`tests/screenshots`](tests/screenshots/capture.spec.ts)) and served from the latest release, so they always match the current build.
-The promo video gets its own job: it re-captures the game footage, synthesises the soundtrack and renders the video with [fframes](promo/README.md). The finished MP4 is not stored in git; it lives in the releases (and as a workflow artifact on pull requests).
+The promo video gets its own job: it re-captures the game footage, renders the game's music as the soundtrack and renders the video with [fframes](promo/README.md). The finished MP4 is not stored in git; it lives in the releases (and as a workflow artifact on pull requests).
 
 **Signing.** APKs are signed with the public `android/app/debug.keystore` by default. To sign with your own private key, add the repository secrets
 `ANDROID_KEYSTORE_BASE64` (`base64 -w0 release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`.
