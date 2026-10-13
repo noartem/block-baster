@@ -1,19 +1,23 @@
-"""Synthesises the promo soundtrack into promo/media/music.wav.
+"""Builds the promo soundtrack into promo/media/music.wav.
 
-Like the game itself (src/audio/sound.ts), nothing is sampled: a 120 BPM beat, bass, arpeggio and
-pad are generated from oscillators and noise, and the game's own sound effects (pick up, place,
-line clear, board clear) are re-created and placed on the frames where they happen in the video.
+The music is the game's own adaptive soundtrack (src/audio/music.ts), rendered by
+promo/audio/soundtrack.mjs from the built game. It follows the video like it follows a game: calm
+lofi over the intro, livelier with the gameplay, house through the styles and features, and full
+EDM from the best score on. On top, the game's sound effects (pick up, place, line clear, board
+clear) are re-created and placed on the frames where they happen in the video.
 
-Usage: python3 promo/audio/music.py   (needs numpy)
+Usage (from the repository root): npm run build && python3 promo/audio/music.py   (needs numpy)
 """
 
 from pathlib import Path
+import json
+import subprocess
+import tempfile
 import wave
 
 import numpy as np
 
 SR = 44100
-BEAT = 0.5  # 120 BPM
 rng = np.random.default_rng(7)
 
 # Scene lengths in seconds, as in promo/src/scenes (DURATION of each scene). Every scene after the
@@ -37,7 +41,20 @@ for _name, _dur in SCENES:
 LENGTH = round(_t + CROSSFADE + 0.1, 1)
 INTRO, GAMEPLAY, STYLES, FEATURES, BEST, ANYWHERE, OUTRO = (STARTS[n] for n, _ in SCENES)
 CLIP = GAMEPLAY + 0.45  # the gameplay recording starts playing here
-DROP = GAMEPLAY  # the beat kicks in with the gameplay
+
+# What the music "sees" over the video: [time, score progress, action speed], linear in between.
+# The music smooths these itself, so it eases from one stage into the next.
+INTENSITY = [
+    [INTRO, 0.0, 0.1],
+    [GAMEPLAY, 0.25, 0.5],
+    [STYLES, 0.55, 0.6],
+    [FEATURES, 0.75, 0.7],
+    [BEST - 1.0, 0.85, 0.8],
+    [BEST, 1.0, 1.0],
+    [LENGTH, 1.0, 1.0],
+]
+# Loudness of the music under the effects (RMS).
+MUSIC_RMS = 0.085
 
 out = np.zeros((int(SR * LENGTH), 2))
 
@@ -158,83 +175,19 @@ def whoosh(start, dur=0.55, vol=0.16):
 
 # --- Music -------------------------------------------------------------------------------------
 
-# C - G - Am - F, one bar (4 beats) each.
-CHORDS = [[48, 52, 55, 60], [43, 47, 50, 55], [45, 48, 52, 57], [41, 45, 48, 53]]
-
-
-def chord_at(time):
-    return CHORDS[int(time / (4 * BEAT)) % 4]
-
-
-def kick(start, vol=0.42):
-    dur = 0.32
-    n = int(SR * dur)
-    f = 45 + 110 * np.exp(-np.arange(n) / SR / 0.04)
-    add(start, osc("sine", f, dur) * env(n, 0.002, 0.11), vol)
-
-
-def hat(start, vol=0.06, open_=False):
-    dur = 0.18 if open_ else 0.05
-    x = np.diff(noise(dur + 1 / SR))
-    add(start, x * env(len(x), 0.001, dur / 4), vol, pan=0.25)
-
-
-def snare(start, vol=0.22):
-    dur = 0.22
-    x = noise(dur) - lowpass(noise(dur), 1500) * 0.5
-    n = len(x)
-    add(start, x * env(n, 0.001, 0.05) + osc("sine", 190, dur) * env(n, 0.001, 0.04) * 0.6, vol)
-
-
-def bass(start, midi, dur, vol=0.22):
-    n = int(SR * dur)
-    x = lowpass(osc("saw", hz(midi), dur, 8), 700)
-    add(start, x * env(n, 0.004, dur * 0.8), vol)
-
-
-def pad(start, notes, dur, vol=0.05):
-    n = int(SR * dur)
-    shape = np.minimum(np.clip(np.arange(n) / (SR * 0.4), 0, 1), np.clip((n - np.arange(n)) / (SR * 0.5), 0, 1))
-    for i, m in enumerate(notes):
-        for detune in (-0.08, 0.08):
-            x = osc("saw", hz(m + 12 + detune), dur, 6)
-            add(start, x * shape, vol / len(notes), pan=detune * 6 * (1 if i % 2 else -1))
-
-
-def music():
-    bar = 4 * BEAT
-    # Pad all the way through, the arpeggio from the start, the beat from the drop.
-    t = 0.0
-    while t < LENGTH - 1:
-        pad(t, chord_at(t + 0.01), bar + 0.4, 0.07 if t >= DROP else 0.1)
-        t += bar
-    step = BEAT / 4
-    for i in range(int((LENGTH - 1.5) / step)):
-        time = i * step
-        notes = chord_at(time)
-        pattern = [0, 2, 3, 1, 2, 3, 0, 3]
-        midi = notes[pattern[i % 8]] + 24
-        gain = 0.07 if time < DROP else 0.05
-        pluck(time, midi, gain, pan=0.35 if i % 2 else -0.35)
-    beat = DROP
-    while beat < LENGTH - 2.0:
-        k = round((beat - DROP) / BEAT)
-        kick(beat)
-        hat(beat + BEAT / 2, open_=k % 4 == 3)
-        hat(beat + BEAT / 4, 0.03)
-        hat(beat + 3 * BEAT / 4, 0.03)
-        if k % 2 == 1:
-            snare(beat)
-        root = chord_at(beat + 0.01)[0] - 12
-        bass(beat, root, BEAT / 2 - 0.02)
-        bass(beat + BEAT / 2, root + (12 if k % 4 == 3 else 0), BEAT / 2 - 0.02)
-        beat += BEAT
-    # Final chord rings out over the end card.
-    end = DROP + round((LENGTH - 2.0 - DROP) / BEAT) * BEAT
-    kick(end, 0.6)
-    pad(end, [48, 52, 55, 60, 64], 2.2, 0.09)
-    for i, m in enumerate([72, 76, 79, 84]):
-        pluck(end + i * 0.06, m, 0.09)
+def soundtrack():
+    root = Path(__file__).resolve().parents[2]
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = Path(tmp) / "soundtrack.wav"
+        subprocess.run(
+            ["node", "promo/audio/soundtrack.mjs", str(wav), str(LENGTH), json.dumps(INTENSITY)],
+            cwd=root,
+            check=True,
+        )
+        with wave.open(str(wav)) as w:
+            x = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").reshape(-1, 2) / 32768
+    n = min(len(x), len(out))
+    out[:n] += x[:n] * MUSIC_RMS / np.sqrt(np.mean(x**2))
 
 
 def effects():
@@ -284,7 +237,7 @@ def effects():
     board_clear(OUTRO + 1.55 - 0.25)
 
 
-music()
+soundtrack()
 effects()
 
 # Master: gentle soft clip and normalisation to -1 dBFS.

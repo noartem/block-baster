@@ -7,6 +7,7 @@ import '@fontsource/orbitron/latin-900.css';
 import '@fontsource/righteous/latin-400.css';
 import './styles.css';
 import { BlockBasterApp } from './app';
+import { Music } from './audio/music';
 import { Sound } from './audio/sound';
 
 async function start() {
@@ -18,7 +19,7 @@ async function start() {
   const seed = seedParam !== null && /^\d+$/.test(seedParam) ? Number(seedParam) : undefined;
   if (params.has('reset')) localStorage.clear();
 
-  const app = new BlockBasterApp(document.getElementById('game') as HTMLCanvasElement, new Sound(), seed);
+  const app = new BlockBasterApp(document.getElementById('game') as HTMLCanvasElement, new Sound(), new Music(), seed);
   // Handy for debugging from the console and for end-to-end tests.
   (window as unknown as { blockBaster: BlockBasterApp }).blockBaster = app;
   document.body.dataset.ready = 'true';

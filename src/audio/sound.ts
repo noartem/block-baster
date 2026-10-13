@@ -1,4 +1,5 @@
 import type { SoundProfile } from '../render/styles';
+import { audioContext } from './context';
 
 /**
  * All sound effects are synthesised at runtime with the Web Audio API, so the
@@ -21,9 +22,8 @@ export class Sound {
   /** Must be called from a user gesture before the first sound can play. */
   unlock(): void {
     if (!this.ctx) {
-      const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!Ctor) return;
-      this.ctx = new Ctor();
+      this.ctx = audioContext();
+      if (!this.ctx) return;
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
@@ -41,6 +41,11 @@ export class Sound {
       damp.connect(this.master);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  /** Resumes a context that was suspended in the background; never creates one. */
+  resume(): void {
+    if (this.ctx?.state === 'suspended') void this.ctx.resume();
   }
 
   suspend(): void {

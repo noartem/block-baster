@@ -1,3 +1,6 @@
+import { audioContext } from './audio/context';
+import { ActionMeter, scoreProgress } from './audio/intensity';
+import type { Music } from './audio/music';
 import type { Sound } from './audio/sound';
 import { idx, previewLines } from './game/board';
 import { Game, type PlaceResult } from './game/game';
@@ -50,10 +53,13 @@ export class BlockBasterApp {
   /** A style earned by the last move, applied on the first frame at or after `at`. */
   private pendingStyle: { style: Style; at: number } | null = null;
   private bestAtStart = 0;
+  /** How fast the player is moving, for the music. */
+  private meter = new ActionMeter();
 
   constructor(
     private canvas: HTMLCanvasElement,
     private sound: Sound,
+    readonly music: Music,
     seed?: number,
   ) {
     this.settings = storage.loadSettings();
@@ -94,6 +100,7 @@ export class BlockBasterApp {
     this.resize();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement!);
     this.updateHud(true);
+    this.music.setInput(() => this.musicInput());
   }
 
   private restoreOrCreate(seed?: number): Game {
@@ -254,7 +261,7 @@ export class BlockBasterApp {
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
     c.addEventListener('pointerdown', (e) => {
-      this.sound.unlock();
+      this.unlockAudio();
       if (this.drag || this.locked || this.game.over) return;
       const { x, y } = point(e);
       const slot = slotAt(this.layout, x, y);
@@ -374,6 +381,7 @@ export class BlockBasterApp {
     const lines = res.lines.rows.length + res.lines.cols.length;
 
     this.sound.place();
+    this.meter.move(now, this.game.combo);
     if (this.settings.haptics) vibrate(lines ? 'medium' : 'light');
 
     if (lines > 0) {
@@ -489,6 +497,7 @@ export class BlockBasterApp {
     $('final-best').textContent = String(this.best);
     $('record').hidden = !record;
     $('gameover').hidden = false;
+    this.syncMusicPause();
     ($('again-btn') as HTMLButtonElement).focus({ preventScroll: true });
   }
 
@@ -498,6 +507,7 @@ export class BlockBasterApp {
     this.game = new Game(seed);
     this.bestAtStart = this.best;
     storage.saveBestAtStart(this.best);
+    this.meter.reset();
     this.locked = false;
     this.drag = null;
     const s = this.scene;
@@ -513,6 +523,7 @@ export class BlockBasterApp {
     storage.saveGame(this.game.serialize());
     $('gameover').hidden = true;
     $('menu').hidden = true;
+    this.syncMusicPause();
     this.updateHud(true);
     this.invalidate();
   }
@@ -535,23 +546,52 @@ export class BlockBasterApp {
   }
 
   // ---------------------------------------------------------------------------
+  // Audio
+  // ---------------------------------------------------------------------------
+
+  /** Unlocks audio (browsers need a user gesture) and starts the music when it's on. */
+  private unlockAudio(): void {
+    this.sound.unlock();
+    if (!this.settings.music || this.music.playing) return;
+    const ctx = audioContext();
+    if (ctx) this.music.start(ctx);
+  }
+
+  /** What the soundtrack follows: progress towards the best score and the pace of play. */
+  private musicInput() {
+    if (this.game.over) return { score: 0, speed: 0 };
+    return { score: scoreProgress(this.game.score, this.bestAtStart), speed: this.meter.speed(performance.now()) };
+  }
+
+  /** Muffles the music while a menu or the game over screen is up. */
+  private syncMusicPause(): void {
+    this.music.setPaused(!$('menu').hidden || !$('gameover').hidden);
+  }
+
+  // ---------------------------------------------------------------------------
   // Menus
   // ---------------------------------------------------------------------------
 
   private bindUi(): void {
     const menu = $('menu');
     const sound = $('sound-toggle') as HTMLInputElement;
+    const music = $('music-toggle') as HTMLInputElement;
     const haptics = $('haptics-toggle') as HTMLInputElement;
     sound.checked = this.settings.sound;
+    music.checked = this.settings.music;
     haptics.checked = this.settings.haptics;
     $('version').textContent = __APP_VERSION__;
     $('exit-btn').hidden = !isNative;
 
     const openMenu = () => {
       menu.hidden = false;
+      this.syncMusicPause();
       ($('resume-btn') as HTMLButtonElement).focus({ preventScroll: true });
     };
-    const closeMenu = () => (menu.hidden = true);
+    const closeMenu = () => {
+      menu.hidden = true;
+      this.syncMusicPause();
+    };
 
     $('menu-btn').addEventListener('click', openMenu);
     $('resume-btn').addEventListener('click', closeMenu);
@@ -566,6 +606,12 @@ export class BlockBasterApp {
         this.sound.unlock();
         this.sound.pickup();
       }
+    });
+    music.addEventListener('change', () => {
+      this.settings.music = music.checked;
+      storage.saveSettings(this.settings);
+      if (music.checked) this.unlockAudio();
+      else this.music.stop();
     });
     haptics.addEventListener('change', () => {
       this.settings.haptics = haptics.checked;
@@ -588,6 +634,8 @@ export class BlockBasterApp {
       if (document.hidden) {
         this.save();
         this.sound.suspend();
+      } else {
+        this.sound.resume();
       }
     });
     window.addEventListener('pagehide', () => this.save());

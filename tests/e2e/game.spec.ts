@@ -163,6 +163,21 @@ test('clearing the board switches the style and high scores unlock new tiers', a
   expect(errors).toEqual([]);
 });
 
+test('music starts on the first touch, speeds up with the score and can be turned off', async ({ page }) => {
+  const errors = await open(page);
+  const box = (await page.locator('#game').boundingBox())!;
+  await page.mouse.click(box.x + 5, box.y + 5);
+  await expect.poll(() => page.evaluate(() => window.blockBaster.music.playing)).toBe(true);
+  expect(await page.evaluate(() => window.blockBaster.music.state.bpm)).toBeLessThan(80);
+  await page.evaluate(() => (window.blockBaster.game.score = 100_000));
+  await expect.poll(() => page.evaluate(() => window.blockBaster.music.state.bpm), { timeout: 10_000 }).toBeGreaterThan(100);
+  await page.locator('#menu-btn').click();
+  await page.locator('label:has(#music-toggle)').click();
+  await expect(page.locator('#music-toggle')).not.toBeChecked();
+  expect(await page.evaluate(() => window.blockBaster.music.playing)).toBe(false);
+  expect(errors).toEqual([]);
+});
+
 test('menu toggles settings and persists them', async ({ page }) => {
   await open(page);
   await page.locator('#menu-btn').click();

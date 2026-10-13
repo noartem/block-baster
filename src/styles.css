@@ -282,12 +282,13 @@ body[data-tier='5'] .score {
 
 .toggles {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 14px 0 6px;
 }
 
 .toggle {
-  flex: 1;
+  flex: 1 1 40%;
   display: flex;
   align-items: center;
   justify-content: center;

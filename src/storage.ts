@@ -4,10 +4,11 @@ const KEYS = { best: 'bb.best', bestAtStart: 'bb.bestAtStart', game: 'bb.game', 
 
 export interface Settings {
   sound: boolean;
+  music: boolean;
   haptics: boolean;
 }
 
-const DEFAULT_SETTINGS: Settings = { sound: true, haptics: true };
+const DEFAULT_SETTINGS: Settings = { sound: true, music: true, haptics: true };
 
 function read<T>(key: string): T | null {
   try {
