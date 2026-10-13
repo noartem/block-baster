@@ -85,6 +85,8 @@ export interface Scene {
   styleWaveAt: number | null;
   board: Board;
   tray: (Piece | null)[];
+  /** The tray is a lucky one (see isLuckyDeal) and glows softly. */
+  lucky: boolean;
   playable: boolean[];
   hiddenSlot: number;
   drag: DragView | null;
@@ -377,16 +379,31 @@ export class Renderer {
 
   private drawTray(scene: Scene): void {
     const { layout, tray, now } = scene;
-    tray.forEach((piece, i) => {
-      if (!piece || i === scene.hiddenSlot) return;
-      if (scene.flying?.slot === i) return;
-      const pos = trayPiecePosition(layout, i, piece.shape);
+    const shown = tray.flatMap((piece, i) => {
+      if (!piece || i === scene.hiddenSlot || scene.flying?.slot === i) return [];
       const t = clamp01((now - scene.trayDealtAt - i * 60) / DEAL_DURATION);
       const offset = (1 - easeOutCubic(t)) * layout.width * 0.6;
       const alpha = (scene.playable[i] ? 1 : 0.35) * clamp01(t * 2);
-      if (alpha <= 0) return;
-      this.drawPiece(piece.shape, scene.playable[i] ? piece.color : 0, pos.x + offset, pos.y, pos.cell, alpha);
+      return alpha > 0 ? [{ piece, i, offset, alpha }] : [];
     });
+    // Halos go first so a neighbour's halo never covers a piece.
+    if (scene.lucky) for (const { i, offset, alpha } of shown) this.drawLuckyGlow(scene, i, offset, alpha);
+    for (const { piece, i, offset, alpha } of shown) {
+      const pos = trayPiecePosition(layout, i, piece.shape);
+      this.drawPiece(piece.shape, scene.playable[i] ? piece.color : 0, pos.x + offset, pos.y, pos.cell, alpha);
+    }
+  }
+
+  /** Soft halo behind a piece of a lucky tray, so help from the dealer is visible. */
+  private drawLuckyGlow(scene: Scene, slot: number, offset: number, alpha: number): void {
+    const { ctx } = this;
+    const s = scene.layout.slots[slot];
+    const radius = scene.layout.trayCell * 3;
+    const glow = ctx.createRadialGradient(s.cx + offset, s.cy, 0, s.cx + offset, s.cy, radius);
+    glow.addColorStop(0, rgba(scene.style.palette.glow, 0.42 * alpha));
+    glow.addColorStop(1, rgba(scene.style.palette.glow, 0));
+    ctx.fillStyle = glow;
+    ctx.fillRect(s.cx + offset - radius, s.cy - radius, radius * 2, radius * 2);
   }
 
   private drawFlying(scene: Scene, f: FlyingPiece): void {

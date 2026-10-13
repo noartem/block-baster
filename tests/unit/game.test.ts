@@ -77,6 +77,22 @@ describe('Game', () => {
     expect(g.tray.every((p) => p !== null)).toBe(true);
   });
 
+  it('deals lucky trays on a steady beat that slows with the score', () => {
+    const g = new Game(1);
+    expect(g.lucky).toBe(true);
+    g.score = 20_000;
+    const beat: boolean[] = [];
+    for (let i = 0; i < 6; i++) {
+      g.board = createBoard();
+      withTray(g, ['dot-0', 'dot-0', 'dot-0']);
+      g.place(0, 0, 0);
+      g.place(1, 0, 1);
+      g.place(2, 0, 2);
+      beat.push(g.lucky);
+    }
+    expect(beat).toEqual([false, false, true, false, false, true]);
+  });
+
   it('detects game over when no remaining piece fits', () => {
     const g = new Game(1);
     g.board = boardFrom(['.#.#.#.#', '#.#.#.#.', '.#.#.#.#', '#.#.#.#.', '.#.#.#.#', '#.#.#.#.', '.#.#.#.#', '#.#.#.#.']);
@@ -93,6 +109,7 @@ describe('Game', () => {
     g.place(0, 0, 0);
     const copy = Game.deserialize(JSON.parse(JSON.stringify(g.serialize())));
     expect(copy.serialize()).toEqual(g.serialize());
+    expect(copy.sinceLucky).toBe(g.sinceLucky);
     // The RNG continues identically, so future deals match.
     expect(copy.rng.next()).toBe(g.rng.next());
     expect(() => Game.deserialize({ v: 2 } as never)).toThrow();

@@ -80,6 +80,7 @@ export class BlockBasterApp {
       styleWaveAt: null,
       board: this.game.board,
       tray: this.game.tray,
+      lucky: this.game.lucky,
       playable: [],
       hiddenSlot: -1,
       drag: null,
@@ -154,6 +155,7 @@ export class BlockBasterApp {
   private syncScene(): void {
     this.scene.board = this.game.board;
     this.scene.tray = this.game.tray;
+    this.scene.lucky = this.game.lucky;
     this.scene.playable = this.game.tray.map((_, i) => this.game.isPlayable(i));
   }
 

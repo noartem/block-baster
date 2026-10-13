@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { createBoard, toMasks } from '../../src/game/board';
-import { OPENING_UNTIL, TRAY_SIZE, bestClear, generateTray, isSolvable, shapeWeight, trayClears } from '../../src/game/generator';
+import {
+  LUCK_LEVELS,
+  RESCUE_FILL,
+  TRAY_SIZE,
+  generateTray,
+  isLuckyDeal,
+  isSolvable,
+  luckEvery,
+  shapeWeight,
+  trayClears,
+} from '../../src/game/generator';
 import { Rng } from '../../src/game/rng';
 import { shapeById } from '../../src/game/shapes';
 import { boardFrom } from './helpers';
@@ -49,12 +59,6 @@ describe('generator', () => {
     }
   });
 
-  it('measures the best single-placement clear', () => {
-    const b = boardFrom(['###.####', '###.####', '###.####', '', '', '', '', '']);
-    expect(bestClear(toMasks(b), shapeById('I3-1'))).toBe(3);
-    expect(bestClear(toMasks(b), shapeById('dot-0'))).toBe(1);
-  });
-
   it('counts lines that only pieces placed together can clear', () => {
     const empty = toMasks(createBoard());
     expect(trayClears(empty, ['I4-0', 'I4-0', 'dot-0'].map(shapeById))).toBe(1);
@@ -63,16 +67,31 @@ describe('generator', () => {
     expect(trayClears(toMasks(b), ['O2-0', 'O2-0', 'dot-0'].map(shapeById))).toBe(2);
   });
 
-  it('deals more line clears in the opening than later on', () => {
+  it('deals lucky trays that clear more lines than plain ones', () => {
     const b = boardFrom(['###.##..', '##..###.', '#....##.', '', '', '', '##...###', '###..###']);
     const masks = toMasks(b);
-    const clears = (score: number) => {
+    const clears = (lucky: boolean) => {
       const rng = new Rng(3);
       let sum = 0;
-      for (let i = 0; i < 40; i++) sum += trayClears(masks, generateTray(b, rng, score));
+      for (let i = 0; i < 40; i++) sum += trayClears(masks, generateTray(b, rng, 20_000, lucky));
       return sum;
     };
-    expect(clears(0)).toBeGreaterThan(clears(OPENING_UNTIL * 3));
+    expect(clears(true)).toBeGreaterThan(clears(false) * 1.25);
+  });
+
+  it('makes lucky trays rarer as the score rises, but never stops them', () => {
+    expect(luckEvery(0)).toBe(1);
+    const steps = LUCK_LEVELS.map((l) => l.every);
+    expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    expect(luckEvery(1e9)).toBe(steps[steps.length - 1]);
+    // Every 3rd tray at 20k: two plain trays, then a lucky one.
+    expect(luckEvery(20_000)).toBe(3);
+    expect([0, 1, 2].map((since) => isLuckyDeal(20_000, 0, since))).toEqual([false, false, true]);
+  });
+
+  it('always deals a lucky tray onto a crowded board', () => {
+    expect(isLuckyDeal(1e6, RESCUE_FILL, 0)).toBe(true);
+    expect(isLuckyDeal(1e6, RESCUE_FILL - 0.1, 0)).toBe(false);
   });
 
   it('makes large pieces more likely as the score rises', () => {

@@ -7,10 +7,11 @@ import {
   clearLines,
   createBoard,
   findFullLines,
+  filledCount,
   isEmpty,
   placeShape,
 } from './board';
-import { TRAY_SIZE, generateTray } from './generator';
+import { TRAY_SIZE, generateTray, isLuckyDeal } from './generator';
 import { Rng } from './rng';
 import { type Shape, shapeById } from './shapes';
 
@@ -53,6 +54,10 @@ export interface SavedGame {
   moves: number;
   /** Times the whole board was cleared; picks the style variant. Missing in older saves. */
   clears?: number;
+  /** Plain trays dealt since the last lucky one. Missing in older saves. */
+  sinceLucky?: number;
+  /** Whether the current tray is a lucky one. Missing in older saves. */
+  lucky?: boolean;
   rng: number;
   over: boolean;
 }
@@ -71,6 +76,10 @@ export class Game {
   sinceClear = 0;
   moves = 0;
   boardClears = 0;
+  /** Plain trays dealt since the last lucky one. */
+  sinceLucky = 0;
+  /** Whether the current tray was dealt as a lucky one. */
+  lucky = false;
   over = false;
   rng: Rng;
 
@@ -81,7 +90,9 @@ export class Game {
 
   /** Deals a new set of pieces into the tray. */
   private deal(): void {
-    const shapes = generateTray(this.board, this.rng, this.score);
+    this.lucky = isLuckyDeal(this.score, filledCount(this.board) / this.board.length, this.sinceLucky);
+    this.sinceLucky = this.lucky ? 0 : this.sinceLucky + 1;
+    const shapes = generateTray(this.board, this.rng, this.score, this.lucky);
     const used = new Set<number>();
     this.tray = shapes.map((shape) => {
       // Prefer distinct colours inside one tray.
@@ -163,6 +174,8 @@ export class Game {
       sinceClear: this.sinceClear,
       moves: this.moves,
       clears: this.boardClears,
+      sinceLucky: this.sinceLucky,
+      lucky: this.lucky,
       rng: this.rng.state,
       over: this.over,
     };
@@ -180,6 +193,8 @@ export class Game {
     game.sinceClear = data.sinceClear;
     game.moves = data.moves;
     game.boardClears = data.clears ?? 0;
+    game.sinceLucky = data.sinceLucky ?? 0;
+    game.lucky = data.lucky ?? false;
     game.rng = new Rng(data.rng);
     game.over = data.over;
     return game;
