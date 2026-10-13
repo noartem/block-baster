@@ -6,7 +6,7 @@ import { idx, previewLines } from './game/board';
 import { Game, type PlaceResult } from './game/game';
 import { shapeById } from './game/shapes';
 import { TOUCH_GAIN, nearestFit } from './input';
-import { exitApp, isNative, onBackButton, vibrate } from './platform';
+import { canVibrate, exitApp, isNative, onBackButton, vibrate } from './platform';
 import { type Layout, computeLayout, slotAt } from './render/layout';
 import { colorFor, shadeHex } from './render/palette';
 import { CLEAR_DURATION, GAME_OVER_FILL, type DragView, Renderer, type Scene, trayPiecePosition } from './render/renderer';
@@ -63,7 +63,8 @@ export class BlockBasterApp {
     seed?: number,
   ) {
     this.settings = storage.loadSettings();
-    this.sound.enabled = this.settings.sound;
+    this.sound.volume = this.settings.sound;
+    this.music.volume = this.settings.music;
     this.best = storage.loadBest();
     this.game = this.restoreOrCreate(seed);
     this.bestAtStart = this.game.moves > 0 ? (storage.loadBestAtStart() ?? this.best) : this.best;
@@ -242,7 +243,7 @@ export class BlockBasterApp {
       s.texts.push({ text: 'New style!', x: width / 2, y: mid - cell * 0.75, size: cell * 0.6, color: style.palette.glow, start: at, duration: 2200, banner: true });
       s.texts.push({ text: style.tier.name, x: width / 2, y: mid + cell * 0.35, size: cell * 1.25, color: style.palette.accent, start: at + 120, duration: 2100, banner: true });
       this.sound.tierUp(style.tier.level);
-      if (this.settings.haptics) vibrate('heavy');
+      this.vibrate('heavy');
       this.fireworks(Math.max(3, style.tier.fx.fireworks), now + 600);
     } else {
       s.texts.push({ text: style.palette.name, x: width / 2, y: mid + cell * 2.1, size: cell * 0.6, color: style.palette.glow, start: now + 500, duration: 1500, banner: true });
@@ -382,7 +383,7 @@ export class BlockBasterApp {
 
     this.sound.place();
     this.meter.move(now, this.game.combo);
-    if (this.settings.haptics) vibrate(lines ? 'medium' : 'light');
+    this.vibrate(lines ? 'medium' : 'light');
 
     if (lines > 0) {
       const pr = r + res.piece.shape.rows / 2;
@@ -405,7 +406,7 @@ export class BlockBasterApp {
       }
       if (lines >= 3 || (lines >= 2 && fx.shake > 1)) s.shake = { start: now, power: Math.min(14, lines * 2.5 * fx.shake) };
       this.sound.clear(lines, res.combo);
-      if (this.settings.haptics && lines >= 3) vibrate('heavy');
+      if (lines >= 3) this.vibrate('heavy');
 
       const mid = boardY + this.layout.boardSize / 2;
       s.texts.push({ text: `+${res.points}`, x: cx, y: cy, size: cell * 0.7, color: '#ffffff', start: now, duration: 900 });
@@ -435,6 +436,10 @@ export class BlockBasterApp {
     if (res.gameOver) this.startGameOver(lines ? CLEAR_DURATION + 250 : 300);
     this.invalidate();
     return res;
+  }
+
+  private vibrate(strength: 'light' | 'medium' | 'heavy'): void {
+    vibrate(strength, this.settings.haptics);
   }
 
   private bannerColor(): string {
@@ -486,7 +491,7 @@ export class BlockBasterApp {
     this.gameOverTimer = window.setTimeout(() => {
       this.scene.gameOverAt = performance.now();
       this.sound.gameOver();
-      if (this.settings.haptics) vibrate('heavy');
+      this.vibrate('heavy');
       this.invalidate();
       this.gameOverTimer = window.setTimeout(() => this.showGameOver(record), GAME_OVER_FILL + 500);
     }, delay);
@@ -572,14 +577,28 @@ export class BlockBasterApp {
   // Menus
   // ---------------------------------------------------------------------------
 
+  /** Wires a 0–100% settings slider to a setting. */
+  private bindLevel(key: keyof Settings, apply: (v: number) => void, preview?: () => void): void {
+    const input = $(`${key}-level`) as HTMLInputElement;
+    const output = $(`${key}-value`);
+    const show = (v: number) => (output.textContent = v > 0 ? `${Math.round(v * 100)}%` : 'Off');
+    input.value = String(Math.round(this.settings[key] * 100));
+    show(this.settings[key]);
+    input.addEventListener('input', () => {
+      const v = Number(input.value) / 100;
+      this.settings[key] = v;
+      show(v);
+      apply(v);
+    });
+    input.addEventListener('change', () => {
+      storage.saveSettings(this.settings);
+      if (this.settings[key] > 0) preview?.();
+    });
+  }
+
   private bindUi(): void {
     const menu = $('menu');
-    const sound = $('sound-toggle') as HTMLInputElement;
-    const music = $('music-toggle') as HTMLInputElement;
-    const haptics = $('haptics-toggle') as HTMLInputElement;
-    sound.checked = this.settings.sound;
-    music.checked = this.settings.music;
-    haptics.checked = this.settings.haptics;
+    $('haptics-row').hidden = !canVibrate;
     $('version').textContent = __APP_VERSION__;
     $('exit-btn').hidden = !isNative;
 
@@ -599,25 +618,17 @@ export class BlockBasterApp {
     $('again-btn').addEventListener('click', () => this.newGame());
     $('exit-btn').addEventListener('click', () => exitApp());
     menu.addEventListener('click', (e) => e.target === menu && closeMenu());
-    sound.addEventListener('change', () => {
-      this.settings.sound = this.sound.enabled = sound.checked;
-      storage.saveSettings(this.settings);
-      if (sound.checked) {
-        this.sound.unlock();
-        this.sound.pickup();
-      }
+    // Sliders apply as they move; the sound and vibration preview once they are let go.
+    this.bindLevel('sound', (v) => (this.sound.volume = v), () => {
+      this.sound.unlock();
+      this.sound.pickup();
     });
-    music.addEventListener('change', () => {
-      this.settings.music = music.checked;
-      storage.saveSettings(this.settings);
-      if (music.checked) this.unlockAudio();
+    this.bindLevel('music', (v) => {
+      this.music.volume = v;
+      if (v > 0) this.unlockAudio();
       else this.music.stop();
     });
-    haptics.addEventListener('change', () => {
-      this.settings.haptics = haptics.checked;
-      storage.saveSettings(this.settings);
-      if (haptics.checked) vibrate('medium');
-    });
+    this.bindLevel('haptics', () => {}, () => this.vibrate('medium'));
     window.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
       if (menu.hidden) openMenu();

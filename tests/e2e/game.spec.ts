@@ -153,7 +153,7 @@ test('clearing the board switches the style and high scores unlock new tiers', a
 
   await page.evaluate(() => {
     const app = window.blockBaster;
-    app.game.score = 199_990;
+    app.game.score = 99_990;
     for (let c = 0; c < 7; c++) app.game.board[8 + c] = 4;
     app.commit(1, 1, 7);
   });
@@ -170,29 +170,55 @@ test('music starts on the first touch, speeds up with the score and can be turne
   await expect.poll(() => page.evaluate(() => window.blockBaster.music.playing)).toBe(true);
   expect(await page.evaluate(() => window.blockBaster.music.state.bpm)).toBeLessThan(80);
   await page.evaluate(() => (window.blockBaster.game.score = 100_000));
-  await expect.poll(() => page.evaluate(() => window.blockBaster.music.state.bpm), { timeout: 10_000 }).toBeGreaterThan(100);
+  await expect.poll(() => page.evaluate(() => window.blockBaster.music.state.bpm), { timeout: 15_000 }).toBeGreaterThan(100);
   await page.locator('#menu-btn').click();
-  await page.locator('label:has(#music-toggle)').click();
-  await expect(page.locator('#music-toggle')).not.toBeChecked();
+  await page.locator('#music-level').fill('0');
+  await expect(page.locator('#music-value')).toHaveText('Off');
   expect(await page.evaluate(() => window.blockBaster.music.playing)).toBe(false);
+  await page.locator('#music-level').fill('60');
+  await expect.poll(() => page.evaluate(() => window.blockBaster.music.playing)).toBe(true);
+  expect(await page.evaluate(() => window.blockBaster.music.volume)).toBeCloseTo(0.6);
   expect(errors).toEqual([]);
 });
 
-test('menu toggles settings and persists them', async ({ page }) => {
+test('menu sliders set the volumes and persist them', async ({ page }) => {
   await open(page);
   await page.locator('#menu-btn').click();
   await expect(page.locator('#menu')).toBeVisible();
   // "Exit" only exists inside the Android app.
   await expect(page.locator('#exit-btn')).toBeHidden();
-  await page.locator('label:has(#sound-toggle)').click();
-  await expect(page.locator('#sound-toggle')).not.toBeChecked();
+  await expect(page.locator('#sound-value')).toHaveText('100%');
+  await page.locator('#sound-level').fill('40');
+  await expect(page.locator('#sound-value')).toHaveText('40%');
+  expect(await page.evaluate(() => window.blockBaster.settings.sound)).toBeCloseTo(0.4);
   await page.locator('#resume-btn').click();
   await expect(page.locator('#menu')).toBeHidden();
   await page.goto('/');
   await page.waitForSelector('body[data-ready=true]');
   await page.locator('#menu-btn').click();
-  await expect(page.locator('#sound-toggle')).not.toBeChecked();
-  await expect(page.locator('#haptics-toggle')).toBeChecked();
+  await expect(page.locator('#sound-level')).toHaveValue('40');
+  await expect(page.locator('#music-level')).toHaveValue('100');
+});
+
+test('vibration settings only show up on devices that can vibrate', async ({ page, isMobile }) => {
+  await open(page);
+  await page.locator('#menu-btn').click();
+  if (isMobile) {
+    await expect(page.locator('#haptics-row')).toBeVisible();
+    await expect(page.locator('#haptics-value')).toHaveText('50%');
+  } else {
+    await expect(page.locator('#haptics-row')).toBeHidden();
+  }
+});
+
+test('turns the on/off switches of older versions into levels', async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => localStorage.setItem('bb.settings', JSON.stringify({ sound: false, music: true, haptics: true })));
+  await page.goto('/');
+  await page.waitForSelector('body[data-ready=true]');
+  expect(await page.evaluate(() => window.blockBaster.settings)).toEqual({ sound: 0, music: 1, haptics: 0.5 });
+  await page.locator('#menu-btn').click();
+  await expect(page.locator('#sound-value')).toHaveText('Off');
 });
 
 test('ships a web app manifest and service worker for offline play', async ({ page, request }) => {

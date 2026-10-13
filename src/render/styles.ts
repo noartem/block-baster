@@ -163,7 +163,7 @@ export const TIERS: Tier[] = [
   {
     level: 1,
     name: 'Candy',
-    minScore: 50_000,
+    minScore: 10_000,
     block: 'candy',
     frame: 'soft',
     font: font('Lilita One'),
@@ -220,7 +220,7 @@ export const TIERS: Tier[] = [
   {
     level: 2,
     name: 'Gems',
-    minScore: 100_000,
+    minScore: 50_000,
     block: 'gem',
     frame: 'metal',
     font: font('Lilita One'),
@@ -277,7 +277,7 @@ export const TIERS: Tier[] = [
   {
     level: 3,
     name: 'Neon',
-    minScore: 200_000,
+    minScore: 100_000,
     block: 'neon',
     frame: 'neon',
     font: font('Orbitron'),
@@ -334,7 +334,7 @@ export const TIERS: Tier[] = [
   {
     level: 4,
     name: 'Aurora',
-    minScore: 500_000,
+    minScore: 200_000,
     block: 'glass',
     frame: 'glass',
     font: font('Righteous'),
@@ -391,7 +391,7 @@ export const TIERS: Tier[] = [
   {
     level: 5,
     name: 'Legendary',
-    minScore: 1_000_000,
+    minScore: 500_000,
     block: 'royal',
     frame: 'gold',
     font: font('Cinzel Decorative'),

@@ -234,7 +234,7 @@ async function captureGameOver(context) {
 
 /** One screenshot per style level, all showing the same position. */
 async function captureStyles(context) {
-  const MIN_SCORES = [0, 50_000, 100_000, 200_000, 500_000, 1_000_000];
+  const MIN_SCORES = [0, 10_000, 50_000, 100_000, 200_000, 500_000];
   for (const [level, min] of MIN_SCORES.entries()) {
     const page = await openGame(context);
     await page.evaluate((score) => {

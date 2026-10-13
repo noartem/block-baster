@@ -12,13 +12,9 @@
 
 ### [⬇️ Download for Android](https://github.com/noartem/block-baster/releases/latest/download/block-baster.apk) &nbsp;·&nbsp; [▶️ Play in your browser](https://noartem.github.io/block-baster/)
 
+## [▶️ Watch the promo video](https://github.com/noartem/block-baster/releases/latest/download/block-baster-promo.mp4)
+
 </div>
-
-## Promo video
-
-<a href="https://github.com/noartem/block-baster/releases/latest/download/block-baster-promo.mp4"><img src="https://github.com/noartem/block-baster/releases/latest/download/promo-poster.jpg" alt="Promo video: the six Block Baster style levels side by side, from Classic to Legendary. Click to watch." width="100%"></a>
-
-**[▶️ Watch the 40-second promo video](https://github.com/noartem/block-baster/releases/latest/download/block-baster-promo.mp4)** (MP4, 1080p). It is rendered in CI from real gameplay of the current build; see [`promo/`](promo/README.md).
 
 <table>
 <tr>
@@ -34,7 +30,7 @@ The game ends when nothing fits.
 - 🎯 **Fair**: every new set of pieces can always be placed somehow
 - 💥 Juicy effects, synthesized sounds and haptics
 - 🎵 Music that plays along: calm lofi at the start, building up to EDM as your score grows and you play faster
-- ✨ Six style levels unlocked at 50k, 100k, 200k, 500k and 1M points, each with new blocks, effects, fonts and sounds; clearing the whole board switches the colours
+- ✨ Six style levels unlocked at 10k, 50k, 100k, 200k and 500k points, each with new blocks, effects, fonts and sounds; clearing the whole board switches the colours
 - 💾 Your game and best score are saved automatically
 - 📴 Works offline, installs as an app on any device
 - 🚫 No ads, no tracking, no network needed

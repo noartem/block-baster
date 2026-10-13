@@ -4,6 +4,7 @@ import {
   BPM_MAX,
   BPM_MIN,
   IntensityTracker,
+  PROGRESS_CURVE,
   SPEED_MAX_MOVES,
   SPEED_WINDOW_MS,
   TARGET_MAX,
@@ -22,12 +23,13 @@ describe('music intensity', () => {
     expect(ramp(0.9, 0.2, 0.4)).toBe(1);
   });
 
-  it('measures score progress against the best score, within bounds', () => {
+  it('measures score progress against the best score, within bounds, easing in', () => {
     expect(scoreProgress(0, 0)).toBe(0);
-    expect(scoreProgress(TARGET_MIN / 2, 0)).toBeCloseTo(0.5);
-    expect(scoreProgress(1500, 3000)).toBeCloseTo(0.5);
+    expect(scoreProgress(TARGET_MIN / 2, 0)).toBeCloseTo(0.5 ** PROGRESS_CURVE);
+    expect(scoreProgress(TARGET_MIN / 2, 0)).toBeLessThan(0.5);
+    expect(scoreProgress(5000, 10000)).toBeCloseTo(0.5 ** PROGRESS_CURVE);
     expect(scoreProgress(TARGET_MAX, 1e6)).toBe(1);
-    expect(scoreProgress(5000, 2000)).toBe(1);
+    expect(scoreProgress(TARGET_MIN, 0)).toBe(1);
   });
 
   it('weighs progress over speed, and needs both for full intensity', () => {
@@ -63,7 +65,7 @@ describe('music intensity', () => {
     expect(risen).toBeGreaterThan(0.6);
     t.update(0.5, 0, 0);
     expect(t.state.speed).toBeGreaterThan(risen * 0.8);
-    for (let i = 0; i < 300; i++) t.update(0.1, 1, 1);
+    for (let i = 0; i < 1000; i++) t.update(0.1, 1, 1);
     expect(t.state.e).toBeCloseTo(1, 3);
     expect(t.state.bpm).toBeCloseTo(BPM_MAX, 1);
   });

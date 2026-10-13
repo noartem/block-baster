@@ -20,7 +20,7 @@
           <div class="score" id="score" aria-live="polite">0</div>
           <div class="style-info" id="style-info">
             <span class="style-name" id="style-name">Classic · Lagoon</span>
-            <span class="tier"><span class="tier-track"><i id="tier-bar"></i></span><span id="tier-next">50k</span></span>
+            <span class="tier"><span class="tier-track"><i id="tier-bar"></i></span><span id="tier-next">10k</span></span>
           </div>
         </div>
         <button class="icon-btn" id="menu-btn" aria-label="Menu">
@@ -37,15 +37,15 @@
         <h2 id="menu-title">Paused</h2>
         <button class="btn primary" id="resume-btn">Resume</button>
         <button class="btn" id="restart-btn">New game</button>
-        <div class="toggles">
-          <label class="toggle"><input type="checkbox" id="music-toggle" /><span>Music</span></label>
-          <label class="toggle"><input type="checkbox" id="sound-toggle" /><span>Sound</span></label>
-          <label class="toggle"><input type="checkbox" id="haptics-toggle" /><span>Vibration</span></label>
+        <div class="levels">
+          <label class="level"><span>Music</span><input type="range" id="music-level" min="0" max="100" step="5" /><output id="music-value"></output></label>
+          <label class="level"><span>Sounds</span><input type="range" id="sound-level" min="0" max="100" step="5" /><output id="sound-value"></output></label>
+          <label class="level" id="haptics-row"><span>Vibration</span><input type="range" id="haptics-level" min="0" max="100" step="5" /><output id="haptics-value"></output></label>
         </div>
         <details class="help">
           <summary>How to play</summary>
           <p>Drag the pieces onto the 8×8 board. Fill a whole row or column to clear it. Clear several lines at once, or keep clearing on consecutive turns, for combo bonuses. The game ends when none of your pieces fit.</p>
-          <p>Clear the whole board to switch to a new look. Score 50k, 100k, 200k, 500k and 1M points in one game to unlock fancier styles, with new blocks, effects, fonts and sounds.</p>
+          <p>Clear the whole board to switch to a new look. Score 10k, 50k, 100k, 200k and 500k points in one game to unlock fancier styles, with new blocks, effects, fonts and sounds.</p>
         </details>
         <button class="btn" id="exit-btn" hidden>Exit</button>
         <p class="about">Free &amp; open source · no ads · no tracking<br /><a href="https://github.com/noartem/block-baster" target="_blank" rel="noopener">github.com/noartem/block-baster</a> · v<span id="version"></span></p>

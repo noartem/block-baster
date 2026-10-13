@@ -188,6 +188,7 @@ export class Music {
   private nextTime = 0;
   private melody = 4;
   private paused = false;
+  private level = 1;
   /** Last value sent to each automated parameter, to skip needless automation. */
   private sent = new Map<AudioParam, number>();
   readonly tracker = new IntensityTracker();
@@ -220,6 +221,24 @@ export class Music {
     this.timer = 0;
     this.graph?.release();
     this.graph = null;
+  }
+
+  /** Volume 0..1, on a perceptual curve. */
+  get volume(): number {
+    return this.level;
+  }
+
+  set volume(v: number) {
+    this.level = Math.min(1, Math.max(0, v));
+    const g = this.graph;
+    if (g) {
+      g.out.gain.cancelScheduledValues(g.ctx.currentTime);
+      g.out.gain.setTargetAtTime(this.gain, g.ctx.currentTime, 0.05);
+    }
+  }
+
+  private get gain(): number {
+    return VOLUME * this.level ** 2;
   }
 
   /** Muffles the music while a menu is open. */
@@ -267,7 +286,7 @@ export class Music {
     this.step = 0;
     this.nextTime = ctx.currentTime + 0.05;
     g.out.gain.setValueAtTime(0, ctx.currentTime);
-    g.out.gain.linearRampToValueAtTime(VOLUME, ctx.currentTime + 1.5);
+    g.out.gain.linearRampToValueAtTime(this.gain, ctx.currentTime + 1.5);
     this.applyPause(g);
     return g;
   }
