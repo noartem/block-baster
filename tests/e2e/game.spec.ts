@@ -138,6 +138,31 @@ test('shows the game over screen and starts a new game', async ({ page }) => {
   expect(fresh).toEqual({ over: false, filled: 0 });
 });
 
+test('clearing the board switches the style and high scores unlock new tiers', async ({ page }) => {
+  const errors = await open(page);
+  await expect(page.locator('body')).toHaveAttribute('data-style', '0.0');
+  await expect(page.locator('#style-name')).toHaveText('Classic · Sapphire');
+  await page.evaluate(() => {
+    const app = window.blockBaster;
+    for (let c = 0; c < 7; c++) app.game.board[c] = 2;
+    app.debugSetTray(['dot-0', 'dot-0', 'dot-0']);
+    app.commit(0, 0, 7);
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-style', '0.1');
+  await expect(page.locator('#style-name')).toHaveText('Classic · Meadow');
+
+  await page.evaluate(() => {
+    const app = window.blockBaster;
+    app.game.score = 199_990;
+    for (let c = 0; c < 7; c++) app.game.board[8 + c] = 4;
+    app.commit(1, 1, 7);
+  });
+  await expect(page.locator('body')).toHaveAttribute('data-tier', '3');
+  await expect(page.locator('#style-name')).toContainText('Neon');
+  await page.waitForTimeout(1500);
+  expect(errors).toEqual([]);
+});
+
 test('menu toggles settings and persists them', async ({ page }) => {
   await open(page);
   await page.locator('#menu-btn').click();

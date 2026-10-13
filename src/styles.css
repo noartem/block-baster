@@ -1,3 +1,23 @@
+/* Registered so the page background can fade smoothly between styles. */
+@property --bg-top {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #4560d6;
+}
+
+@property --bg-mid {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #2f43ab;
+}
+
+@property --bg-bottom {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #232f80;
+}
+
+/* Defaults match the Classic style; the app overrides them for each style (see src/render/styles.ts). */
 :root {
   --bg-top: #4560d6;
   --bg-mid: #2f43ab;
@@ -6,10 +26,20 @@
   --card-edge: #17205e;
   --accent: #ffcf3f;
   --accent-dark: #e39b12;
+  --btn: #3b4cb3;
+  --btn-edge: #1d2770;
+  --glow: #7ee8ff;
+  --glow2: #ffffff;
   --text: #ffffff;
   --muted: #b9c3f5;
   --font: 'Baloo 2', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font);
+  --font-display-weight: 800;
   color-scheme: dark;
+  transition:
+    --bg-top 0.9s ease,
+    --bg-mid 0.9s ease,
+    --bg-bottom 0.9s ease;
 }
 
 [hidden] {
@@ -37,6 +67,8 @@ body {
 }
 
 #app {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -73,13 +105,70 @@ body {
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.25));
 }
 
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
 .score {
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-weight: var(--font-display-weight);
   font-size: clamp(40px, 11vw, 60px);
   line-height: 1;
   padding-top: 6px;
   text-shadow: 0 3px 0 rgba(0, 0, 0, 0.28);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Wide display fonts need a little less size to fit seven digits. */
+body[data-tier='3'] .score,
+body[data-tier='5'] .score {
+  font-size: clamp(32px, 8.5vw, 50px);
+  padding: 8px 0 4px;
+}
+
+.style-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
+  white-space: nowrap;
+}
+
+.tier {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tier-track {
+  width: 84px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.tier-track i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--glow));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease-out;
 }
 
 .icon-btn {
@@ -156,8 +245,9 @@ body {
 
 .card h2 {
   margin: 0 0 14px;
+  font-family: var(--font-display);
   font-size: 30px;
-  font-weight: 800;
+  font-weight: var(--font-display-weight);
   line-height: 1.1;
 }
 
@@ -170,8 +260,8 @@ body {
   border-radius: 14px;
   font: 800 20px var(--font);
   color: var(--text);
-  background: #3b4cb3;
-  box-shadow: 0 4px 0 #1d2770;
+  background: var(--btn);
+  box-shadow: 0 4px 0 var(--btn-edge);
   cursor: pointer;
 }
 
@@ -183,7 +273,7 @@ body {
 
 .btn:active {
   transform: translateY(3px);
-  box-shadow: 0 1px 0 #1d2770;
+  box-shadow: 0 1px 0 var(--btn-edge);
 }
 
 .btn.primary:active {
@@ -262,8 +352,9 @@ body {
 }
 
 .final-score {
-  font-size: 58px;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 54px;
+  font-weight: var(--font-display-weight);
   line-height: 1.05;
 }
 
@@ -293,10 +384,231 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Style tiers: richer HUD and animated backgrounds as the score climbs.
+ * body[data-tier] is set by the app; colours come from the style variables.
+ * ------------------------------------------------------------------------- */
+
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+}
+
+body[data-tier='2'] .score,
+body[data-tier='4'] .score {
+  text-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.28),
+    0 0 18px var(--glow);
+}
+
+body[data-tier='3'] .score {
+  text-shadow:
+    0 0 6px var(--glow),
+    0 0 18px var(--glow),
+    0 0 36px var(--glow2);
+}
+
+body[data-tier='5'] .score {
+  color: transparent;
+  background: linear-gradient(180deg, #fffbe6 0%, var(--accent) 48%, var(--accent) 55%, #b07a10 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow: none;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 10px var(--glow));
+}
+
+body[data-tier='3'] .card,
+body[data-tier='4'] .card,
+body[data-tier='5'] .card {
+  box-shadow:
+    0 0 22px var(--card-edge),
+    0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+body[data-tier='5'] .tier-track i {
+  background: linear-gradient(90deg, #b07a10, #fff6c8, var(--accent), #fff6c8, #b07a10);
+  background-size: 200% 100%;
+  animation: shimmer 2.4s linear infinite;
+}
+
+/* Candy: bubbles drifting up. */
+body[data-tier='1']::before {
+  inset: 0 0 -320px;
+  background-image:
+    radial-gradient(circle at 12% 20%, rgba(255, 255, 255, 0.22) 0 10px, transparent 11px),
+    radial-gradient(circle at 70% 45%, transparent 0 15px, rgba(255, 255, 255, 0.3) 16px 18px, transparent 19px),
+    radial-gradient(circle at 35% 80%, rgba(255, 255, 255, 0.2) 0 6px, transparent 7px),
+    radial-gradient(circle at 88% 88%, transparent 0 21px, rgba(255, 255, 255, 0.2) 22px 24px, transparent 25px),
+    radial-gradient(circle at 50% 8%, rgba(255, 255, 255, 0.14) 0 14px, transparent 15px);
+  background-size: 320px 320px;
+  animation: rise 26s linear infinite;
+}
+
+/* Gems: twinkling glints. */
+body[data-tier='2']::before,
+body[data-tier='2']::after {
+  inset: 0;
+  background-image:
+    radial-gradient(circle, var(--glow2) 0 1.5px, transparent 2.5px),
+    radial-gradient(circle, var(--glow) 0 1px, transparent 2px);
+  background-size:
+    140px 170px,
+    90px 110px;
+  background-position:
+    0 0,
+    40px 60px;
+  animation: twinkle 3.2s ease-in-out infinite alternate;
+}
+
+body[data-tier='2']::after {
+  background-size:
+    200px 150px,
+    120px 130px;
+  background-position:
+    70px 30px,
+    10px 90px;
+  animation-delay: -1.6s;
+}
+
+/* Neon: a synthwave grid rolling towards you under a glowing horizon. */
+body[data-tier='3']::before {
+  left: -50%;
+  right: -50%;
+  bottom: -60px;
+  height: 60%;
+  background-image:
+    linear-gradient(var(--glow) 2px, transparent 2px),
+    linear-gradient(90deg, var(--glow) 2px, transparent 2px);
+  background-size: 60px 60px;
+  transform-origin: 50% 100%;
+  transform: perspective(260px) rotateX(62deg);
+  opacity: 0.4;
+  -webkit-mask-image: linear-gradient(to top, #000 25%, transparent 90%);
+  mask-image: linear-gradient(to top, #000 25%, transparent 90%);
+  animation: grid 1.8s linear infinite;
+}
+
+body[data-tier='3']::after {
+  left: 0;
+  right: 0;
+  bottom: 28%;
+  height: 45%;
+  background: radial-gradient(ellipse 60% 55% at 50% 100%, var(--glow2) 0%, transparent 70%);
+  opacity: 0.3;
+}
+
+/* Aurora: slow drifting curtains of light over faint stars. */
+body[data-tier='4']::before {
+  inset: -20%;
+  background:
+    radial-gradient(40% 25% at 30% 25%, var(--glow) 0%, transparent 70%),
+    radial-gradient(35% 22% at 72% 32%, var(--glow2) 0%, transparent 70%),
+    radial-gradient(50% 25% at 50% 72%, var(--glow) 0%, transparent 70%);
+  filter: blur(30px);
+  opacity: 0.45;
+  animation: aurora 14s ease-in-out infinite alternate;
+}
+
+body[data-tier='4']::after {
+  inset: 0;
+  background-image:
+    radial-gradient(circle, #ffffff 0 1px, transparent 1.6px),
+    radial-gradient(circle, #ffffff 0 0.8px, transparent 1.4px);
+  background-size:
+    170px 190px,
+    110px 90px;
+  background-position:
+    20px 40px,
+    60px 10px;
+  opacity: 0.35;
+}
+
+/* Legendary: turning rays of light and a twinkling golden starfield. */
+body[data-tier='5']::before {
+  left: 50%;
+  top: 38%;
+  width: 240vmax;
+  height: 240vmax;
+  margin: -120vmax 0 0 -120vmax;
+  background: repeating-conic-gradient(var(--glow) 0deg 5deg, transparent 5deg 15deg);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 45%);
+  mask-image: radial-gradient(circle, #000 0%, transparent 45%);
+  opacity: 0.16;
+  animation: spin 80s linear infinite;
+}
+
+body[data-tier='5']::after {
+  inset: 0;
+  background-image:
+    radial-gradient(circle, var(--glow2) 0 1.5px, transparent 2.5px),
+    radial-gradient(circle, #ffffff 0 1px, transparent 2px),
+    radial-gradient(circle, var(--accent) 0 1.2px, transparent 2.2px);
+  background-size:
+    150px 130px,
+    95px 115px,
+    210px 180px;
+  background-position:
+    10px 20px,
+    55px 75px,
+    120px 40px;
+  animation: twinkle 2.6s ease-in-out infinite alternate;
+}
+
+@keyframes rise {
+  to {
+    transform: translateY(-320px);
+  }
+}
+
+@keyframes twinkle {
+  from {
+    opacity: 0.15;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
+@keyframes grid {
+  to {
+    transform: perspective(260px) rotateX(62deg) translateY(60px);
+  }
+}
+
+@keyframes aurora {
+  0% {
+    transform: translate(-6%, -3%) rotate(-4deg) scale(1);
+  }
+  50% {
+    transform: translate(5%, 2%) rotate(3deg) scale(1.1);
+  }
+  100% {
+    transform: translate(-3%, 4%) rotate(-2deg) scale(1.05);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .overlay,
   .card,
-  .record {
-    animation: none;
+  .record,
+  body::before,
+  body::after,
+  .tier-track i {
+    animation: none !important;
   }
 }

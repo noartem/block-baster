@@ -1,18 +1,10 @@
-/** Block colours, indexed by colour id - 1. */
-export const BLOCK_COLORS = ['#ef4b5a', '#f7962f', '#f6cd30', '#4cc85d', '#2fbde8', '#4f6ef2', '#a75ae6'];
+import type { Palette } from './styles';
+
 export const GRAY = '#7a8296';
 
-export const THEME = {
-  board: '#1b2556',
-  boardEdge: '#121a40',
-  cell: '#232f68',
-  cellInner: '#1f2a5f',
-  text: '#ffffff',
-  font: "'Baloo 2', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-};
-
-export function colorFor(id: number): string {
-  return id <= 0 ? GRAY : BLOCK_COLORS[(id - 1) % BLOCK_COLORS.length];
+/** Block colour for a 1-based colour id; 0 is the grey used for unplayable pieces and game over. */
+export function colorFor(id: number, palette: Palette): string {
+  return id <= 0 ? GRAY : palette.blocks[(id - 1) % palette.blocks.length];
 }
 
 function parse(hex: string): [number, number, number] {
@@ -26,6 +18,14 @@ export function shade(hex: string, amount: number): string {
   const t = Math.abs(amount);
   const [r, g, b] = parse(hex).map((v) => Math.round(v + (target - v) * t));
   return `rgb(${r},${g},${b})`;
+}
+
+/** Like `shade`, but returns a hex colour so the result can be shaded again. */
+export function shadeHex(hex: string, amount: number): string {
+  const target = amount > 0 ? 255 : 0;
+  const t = Math.abs(amount);
+  const n = parse(hex).reduce((acc, v) => (acc << 8) | Math.round(v + (target - v) * t), 0);
+  return `#${n.toString(16).padStart(6, '0')}`;
 }
 
 export function rgba(hex: string, alpha: number): string {

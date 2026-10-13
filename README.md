@@ -27,6 +27,7 @@ The game ends when nothing fits.
 
 - 🎯 **Fair**: every new set of pieces can always be placed somehow
 - ✨ Juicy effects, synthesized sounds and haptics
+- ✨ Six style levels unlocked at 50k, 100k, 200k, 500k and 1M points, each with new blocks, effects, fonts and sounds; clearing the whole board switches the colours
 - 💾 Your game and best score are saved automatically
 - 📴 Works offline, installs as an app on any device
 - 🚫 No ads, no tracking, no network needed
@@ -83,5 +84,5 @@ Android won't update an app signed with a different key, so uninstall the old bu
 
 ## Credits
 
-Code under the [MIT license](LICENSE). Font: [Baloo 2](https://github.com/EkType/Baloo2) (SIL OFL).
+Code under the [MIT license](LICENSE). Fonts: [Baloo 2](https://github.com/EkType/Baloo2), [Lilita One](https://fonts.google.com/specimen/Lilita+One), [Orbitron](https://github.com/theleagueof/orbitron), [Righteous](https://fonts.google.com/specimen/Righteous) and [Cinzel Decorative](https://fonts.google.com/specimen/Cinzel+Decorative) (all SIL OFL).
 Block Baster is an independent fan project and is not affiliated with the makers of *Block Blast*.

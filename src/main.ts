@@ -1,5 +1,10 @@
 import '@fontsource/baloo-2/latin-600.css';
 import '@fontsource/baloo-2/latin-800.css';
+// Display fonts of the higher style tiers; browsers only download them once a style uses them.
+import '@fontsource/cinzel-decorative/latin-900.css';
+import '@fontsource/lilita-one/latin-400.css';
+import '@fontsource/orbitron/latin-900.css';
+import '@fontsource/righteous/latin-400.css';
 import './styles.css';
 import { BlockBasterApp } from './app';
 import { Sound } from './audio/sound';

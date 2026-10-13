@@ -5,9 +5,10 @@ import { shapeById } from './game/shapes';
 import { TOUCH_GAIN, nearestFit } from './input';
 import { exitApp, isNative, onBackButton, vibrate } from './platform';
 import { type Layout, computeLayout, slotAt } from './render/layout';
-import { colorFor } from './render/palette';
+import { colorFor, shadeHex } from './render/palette';
 import { CLEAR_DURATION, GAME_OVER_FILL, type DragView, Renderer, type Scene, trayPiecePosition } from './render/renderer';
 import { clearSpriteCache, spriteCacheSize } from './render/sprites';
+import { type Style, formatScore, nextTier, styleFor } from './render/styles';
 import { type Settings, storage } from './storage';
 
 interface DragState {
@@ -46,6 +47,7 @@ export class BlockBasterApp {
   private locked = false;
   private frame = 0;
   private gameOverTimer = 0;
+  private styleTimer = 0;
   private bestAtStart = 0;
 
   constructor(
@@ -66,6 +68,8 @@ export class BlockBasterApp {
       layout: this.layout,
       dpr: window.devicePixelRatio || 1,
       now: performance.now(),
+      style: styleFor(this.game.score, this.game.boardClears),
+      styleWaveAt: null,
       board: this.game.board,
       tray: this.game.tray,
       playable: [],
@@ -76,10 +80,13 @@ export class BlockBasterApp {
       placed: null,
       clearing: null,
       particles: [],
+      rings: [],
+      beams: [],
       texts: [],
       shake: null,
       gameOverAt: null,
     };
+    this.applyStyle(this.scene.style);
     this.syncScene();
     this.bindInput();
     this.bindUi();
@@ -143,10 +150,89 @@ export class BlockBasterApp {
       const diff = target - this.shownScore;
       this.shownScore = Math.abs(diff) <= 1 ? target : this.shownScore + Math.ceil(Math.abs(diff) * 0.18) * Math.sign(diff);
       $('score').textContent = String(this.shownScore);
+      this.updateTierProgress();
     }
     // Runs every frame while dragging; only touch the DOM when the text changes.
     const best = String(Math.max(this.best, this.game.score));
     if ($('best').textContent !== best) $('best').textContent = best;
+  }
+
+  /** Progress bar towards the next style tier. */
+  private updateTierProgress(): void {
+    const { tier } = this.scene.style;
+    const next = nextTier(tier);
+    const progress = next ? (this.shownScore - tier.minScore) / (next.minScore - tier.minScore) : 1;
+    $('tier-bar').style.transform = `scaleX(${Math.max(0, Math.min(1, progress))})`;
+    $('tier-next').textContent = next ? formatScore(next.minScore) : 'MAX';
+    $('style-info').title = next ? `Next style: ${next.name} at ${next.minScore.toLocaleString('en-US')} points` : 'Top style unlocked';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Styles
+  // ---------------------------------------------------------------------------
+
+  /** Switches the board, blocks, page colours, fonts and sounds to a style. */
+  applyStyle(style: Style): void {
+    this.scene.style = style;
+    clearSpriteCache();
+    this.sound.profile = style.tier.sound;
+    const { palette: p, tier } = style;
+    const vars: Record<string, string> = {
+      '--bg-top': p.bg[0],
+      '--bg-mid': p.bg[1],
+      '--bg-bottom': p.bg[2],
+      '--card': p.card,
+      '--card-edge': p.cardEdge,
+      '--accent': p.accent,
+      '--accent-dark': shadeHex(p.accent, -0.28),
+      '--btn': shadeHex(p.card, 0.14),
+      '--btn-edge': p.boardEdge,
+      '--glow': p.glow,
+      '--glow2': p.glow2,
+      '--font-display': tier.font,
+      '--font-display-weight': String(tier.fontWeight),
+    };
+    const root = document.documentElement;
+    for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+    document.body.dataset.tier = String(tier.level);
+    document.body.dataset.style = style.key;
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', p.bg[1]);
+    $('style-name').textContent = `${tier.name} · ${p.name}`;
+    this.updateTierProgress();
+    // Redraw once the tier's font is ready, so canvas text doesn't stay in the fallback font.
+    document.fonts
+      ?.load(`${tier.fontWeight} 32px ${tier.font}`)
+      .then(() => this.invalidate())
+      .catch(() => {});
+    this.invalidate();
+  }
+
+  /** Switches to the style earned by the current game, after the line-clear animation. */
+  private updateStyle(delay: number): void {
+    const style = styleFor(this.game.score, this.game.boardClears);
+    clearTimeout(this.styleTimer);
+    if (style.key === this.scene.style.key) return;
+    this.styleTimer = window.setTimeout(() => {
+      const prev = this.scene.style;
+      const now = performance.now();
+      const s = this.scene;
+      const { cell, boardY, boardSize, width } = this.layout;
+      const mid = boardY + boardSize / 2;
+      this.applyStyle(style);
+      s.styleWaveAt = now;
+      if (style.tier.level > prev.tier.level) {
+        const at = now + 700;
+        s.texts.push({ text: 'New style!', x: width / 2, y: mid - cell * 0.75, size: cell * 0.6, color: style.palette.glow, start: at, duration: 2200, banner: true });
+        s.texts.push({ text: style.tier.name, x: width / 2, y: mid + cell * 0.35, size: cell * 1.25, color: style.palette.accent, start: at + 120, duration: 2100, banner: true });
+        this.sound.tierUp(style.tier.level);
+        if (this.settings.haptics) vibrate('heavy');
+        this.fireworks(Math.max(3, style.tier.fx.fireworks), now + 600);
+      } else {
+        s.texts.push({ text: style.palette.name, x: width / 2, y: mid + cell * 2.1, size: cell * 0.6, color: style.palette.glow, start: now + 500, duration: 1500, banner: true });
+        this.sound.styleShift();
+      }
+      this.invalidate();
+    }, delay);
   }
 
   // ---------------------------------------------------------------------------
@@ -289,22 +375,34 @@ export class BlockBasterApp {
         start: now,
         cells: res.cleared.map((cc) => ({ ...cc, delay: Math.hypot(cc.r + 0.5 - pr, cc.c + 0.5 - pc) * 28 })),
       };
-      for (const cc of res.cleared) this.burst(boardX + (cc.c + 0.5) * cell, boardY + (cc.r + 0.5) * cell, colorFor(cc.color), now);
-      if (lines >= 3) s.shake = { start: now, power: Math.min(10, lines * 2.5) };
+      const { palette, tier } = s.style;
+      const fx = tier.fx;
+      for (const cc of res.cleared) this.burst(boardX + (cc.c + 0.5) * cell, boardY + (cc.r + 0.5) * cell, colorFor(cc.color, palette), now);
+      if (fx.beam) {
+        const color = colorFor(res.piece.color, palette);
+        for (const row of res.lines.rows) s.beams.push({ row, color, start: now });
+        for (const col of res.lines.cols) s.beams.push({ col, color, start: now });
+      }
+      if (fx.ring) {
+        s.rings.push({ x: cx, y: cy, radius: cell * (2 + lines), color: palette.glow, start: now, duration: 520 });
+        if (lines >= 2) s.rings.push({ x: cx, y: cy, radius: cell * (3 + lines), color: colorFor(res.piece.color, palette), start: now + 90, duration: 620 });
+      }
+      if (lines >= 3 || (lines >= 2 && fx.shake > 1)) s.shake = { start: now, power: Math.min(14, lines * 2.5 * fx.shake) };
       this.sound.clear(lines, res.combo);
       if (this.settings.haptics && lines >= 3) vibrate('heavy');
 
       const mid = boardY + this.layout.boardSize / 2;
       s.texts.push({ text: `+${res.points}`, x: cx, y: cy, size: cell * 0.7, color: '#ffffff', start: now, duration: 900 });
       if (res.boardCleared) {
-        s.texts.push({ text: 'Board Clear!', x: this.layout.width / 2, y: mid, size: cell * 0.95, color: '#ffe066', start: now + 150, duration: 1400, banner: true });
+        s.texts.push({ text: 'Board Clear!', x: this.layout.width / 2, y: mid, size: cell * 0.95, color: this.bannerColor(), start: now + 150, duration: 1400, banner: true });
         this.sound.boardClear();
+        this.fireworks(fx.fireworks, now + 200);
       } else if (lines >= 2) {
         const word = PRAISE[Math.min(lines, PRAISE.length - 1)];
-        s.texts.push({ text: word, x: this.layout.width / 2, y: mid, size: cell * 0.95, color: '#ffe066', start: now + 80, duration: 1100, banner: true });
+        s.texts.push({ text: word, x: this.layout.width / 2, y: mid, size: cell * 0.95, color: this.bannerColor(), start: now + 80, duration: 1100, banner: true });
       }
       if (res.combo >= 2) {
-        s.texts.push({ text: `Combo ${res.combo}`, x: this.layout.width / 2, y: mid + cell * 1.05, size: cell * 0.62, color: '#7ee8ff', start: now + 80, duration: 1100, banner: true });
+        s.texts.push({ text: `Combo ${res.combo}`, x: this.layout.width / 2, y: mid + cell * 1.05, size: cell * 0.62, color: this.scene.style.tier.level === 0 ? '#7ee8ff' : palette.glow, start: now + 80, duration: 1100, banner: true });
       }
     }
 
@@ -316,26 +414,54 @@ export class BlockBasterApp {
       storage.saveBest(this.best);
     }
     storage.saveGame(this.game.over ? null : this.game.serialize());
+    this.updateStyle(lines ? CLEAR_DURATION + 80 : 0);
 
     if (res.gameOver) this.startGameOver(lines ? CLEAR_DURATION + 250 : 300);
     this.invalidate();
     return res;
   }
 
-  private burst(x: number, y: number, color: string, now: number): void {
-    for (let i = 0; i < 4; i++) {
+  /** Classic keeps its original yellow; other styles use their accent. */
+  private bannerColor(): string {
+    return this.scene.style.tier.level === 0 ? '#ffe066' : this.scene.style.palette.accent;
+  }
+
+  private burst(x: number, y: number, color: string, now: number, count?: number, speed = 1): void {
+    const { tier, palette } = this.scene.style;
+    const fx = tier.fx;
+    const sparkles = [palette.glow, palette.glow2, palette.accent];
+    const n = count ?? fx.particles;
+    for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const v = 80 + Math.random() * 220;
+      const v = (80 + Math.random() * 220) * speed;
       this.scene.particles.push({
         x,
         y,
         vx: Math.cos(a) * v,
-        vy: Math.sin(a) * v - 220,
-        size: this.layout.cell * (0.14 + Math.random() * 0.14),
-        color,
+        vy: Math.sin(a) * v - 220 * Math.min(1, fx.gravity / 900),
+        size: this.layout.cell * (0.14 + Math.random() * 0.14) * (fx.shape === 'star' || fx.shape === 'diamond' ? 1.4 : 1),
+        color: Math.random() < fx.sparkle ? sparkles[i % sparkles.length] : color,
         born: now + Math.random() * 120,
-        life: 550 + Math.random() * 300,
+        life: 550 + Math.random() * 300 + (fx.gravity < 400 ? 250 : 0),
+        shape: fx.shape,
+        gravity: fx.gravity,
+        spin: (Math.random() - 0.5) * 12,
       });
+    }
+  }
+
+  /** Celebration bursts scattered over the board. */
+  private fireworks(count: number, start: number): void {
+    const { cell, boardX, boardY, boardSize } = this.layout;
+    const { palette } = this.scene.style;
+    const colors = [...palette.blocks, palette.glow, palette.accent];
+    for (let i = 0; i < count; i++) {
+      const x = boardX + boardSize * (0.15 + Math.random() * 0.7);
+      const y = boardY + boardSize * (0.15 + Math.random() * 0.6);
+      const at = start + i * 140 + Math.random() * 80;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      this.burst(x, y, color, at, 14, 1.6);
+      if (this.scene.style.tier.fx.ring) this.scene.rings.push({ x, y, radius: cell * 1.8, color, start: at, duration: 600 });
     }
   }
 
@@ -361,15 +487,21 @@ export class BlockBasterApp {
 
   newGame(seed?: number): void {
     clearTimeout(this.gameOverTimer);
+    clearTimeout(this.styleTimer);
     this.game = new Game(seed);
     this.bestAtStart = this.best;
     storage.saveBestAtStart(this.best);
     this.locked = false;
     this.drag = null;
     const s = this.scene;
-    Object.assign(s, { hiddenSlot: -1, flying: null, placed: null, clearing: null, particles: [], texts: [], shake: null, gameOverAt: null });
+    Object.assign(s, { hiddenSlot: -1, flying: null, placed: null, clearing: null, particles: [], rings: [], beams: [], texts: [], shake: null, gameOverAt: null, styleWaveAt: null });
     s.trayDealtAt = performance.now();
     this.shownScore = 0;
+    const style = styleFor(0, 0);
+    if (style.key !== s.style.key) {
+      this.applyStyle(style);
+      s.styleWaveAt = performance.now();
+    }
     this.syncScene();
     storage.saveGame(this.game.serialize());
     $('gameover').hidden = true;
@@ -388,7 +520,7 @@ export class BlockBasterApp {
   /** Sizes of everything that accumulates while playing (for leak tests). */
   debugStats() {
     const s = this.scene;
-    return { sprites: spriteCacheSize(), particles: s.particles.length, texts: s.texts.length, animating: this.renderer.isAnimating(s) };
+    return { sprites: spriteCacheSize(), particles: s.particles.length, rings: s.rings.length, beams: s.beams.length, texts: s.texts.length, animating: this.renderer.isAnimating(s) };
   }
 
   save(): void {
