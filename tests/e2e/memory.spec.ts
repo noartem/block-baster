@@ -116,6 +116,8 @@ test('memory stays flat over a long game', async ({ page, browserName }) => {
   // One sprite per colour (plus gray for pieces that don't fit) at one size.
   expect(after.sprites).toBeLessThanOrEqual(8);
   expect(after.particles).toBe(0);
+  expect(after.rings).toBe(0);
+  expect(after.beams).toBe(0);
   expect(after.texts).toBe(0);
   expect(after.listeners).toBe(warm.listeners);
   expect(after.nodes - warm.nodes).toBeLessThanOrEqual(20);
