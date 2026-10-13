@@ -1,3 +1,6 @@
 /target
 /frames
 /.frames
+# Rendered by CI and attached to every GitHub release.
+/block-baster-promo.mp4
+/promo-poster.jpg

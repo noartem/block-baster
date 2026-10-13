@@ -51,6 +51,8 @@ export interface SavedGame {
   combo: number;
   sinceClear: number;
   moves: number;
+  /** Times the whole board was cleared; picks the style variant. Missing in older saves. */
+  clears?: number;
   rng: number;
   over: boolean;
 }
@@ -68,6 +70,7 @@ export class Game {
   combo = 0;
   sinceClear = 0;
   moves = 0;
+  boardClears = 0;
   over = false;
   rng: Rng;
 
@@ -122,6 +125,7 @@ export class Game {
     }
 
     const boardCleared = count > 0 && isEmpty(this.board);
+    if (boardCleared) this.boardClears++;
     const lp = linePoints(count, this.combo);
     const points = piece.shape.cells.length + lp + (boardCleared ? BOARD_CLEAR_BONUS : 0);
     this.score += points;
@@ -158,6 +162,7 @@ export class Game {
       combo: this.combo,
       sinceClear: this.sinceClear,
       moves: this.moves,
+      clears: this.boardClears,
       rng: this.rng.state,
       over: this.over,
     };
@@ -174,6 +179,7 @@ export class Game {
     game.combo = data.combo;
     game.sinceClear = data.sinceClear;
     game.moves = data.moves;
+    game.boardClears = data.clears ?? 0;
     game.rng = new Rng(data.rng);
     game.over = data.over;
     return game;

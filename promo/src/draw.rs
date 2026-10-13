@@ -9,18 +9,18 @@ use std::sync::LazyLock;
 pub const W: f32 = 1920.;
 pub const H: f32 = 1080.;
 
-/// Block colours of the game (src/render/palette.ts).
-pub const BLOCK_COLORS: [&str; 7] = ["#ef4b5a", "#f7962f", "#f6cd30", "#4cc85d", "#2fbde8", "#4f6ef2", "#a75ae6"];
-pub const RED: usize = 0;
-pub const ORANGE: usize = 1;
-pub const YELLOW: usize = 2;
-pub const GREEN: usize = 3;
-pub const CYAN: usize = 4;
-pub const BLUE: usize = 5;
-pub const PURPLE: usize = 6;
+/// Block colours of the game's default "Lagoon" style (src/render/styles.ts).
+pub const BLOCK_COLORS: [&str; 7] = ["#ff6f61", "#ff9f1c", "#ffd23f", "#8bd346", "#41a6f6", "#8b5cf6", "#e85d9f"];
+pub const CORAL: usize = 0;
+pub const TANGERINE: usize = 1;
+pub const SUNFLOWER: usize = 2;
+pub const LIME: usize = 3;
+pub const SKY: usize = 4;
+pub const GRAPE: usize = 5;
+pub const MAGENTA: usize = 6;
 
-pub const ACCENT: &str = "#ffcf3f";
-pub const MUTED: &str = "#b9c3f5";
+pub const ACCENT: &str = "#ffb547";
+pub const MUTED: &str = "#c8f1ec";
 pub const FONT: &str = "Baloo 2";
 
 // ---------------------------------------------------------------------------------------------
@@ -163,13 +163,13 @@ pub fn block_at<'a>(color: usize, cx: f32, cy: f32, size: f32, deg: f32, opacity
 
 /// Block positions of the app icon (assets/icon.svg) on a 1024 grid: colour and top-left corner.
 const LOGO_BLOCKS: [(usize, f32, f32); 7] = [
-    (RED, 150.7, 150.7),
-    (YELLOW, 396.5, 150.7),
-    (PURPLE, 642.3, 150.7),
-    (YELLOW, 396.5, 396.5),
-    (GREEN, 150.7, 642.3),
-    (CYAN, 396.5, 642.3),
-    (BLUE, 642.3, 642.3),
+    (CORAL, 150.7, 150.7),
+    (SUNFLOWER, 396.5, 150.7),
+    (MAGENTA, 642.3, 150.7),
+    (SUNFLOWER, 396.5, 396.5),
+    (LIME, 150.7, 642.3),
+    (SKY, 396.5, 642.3),
+    (GRAPE, 642.3, 642.3),
 ];
 
 /// The app icon, assembled from flying blocks. `t` is the time since the assembly started; the
@@ -193,9 +193,9 @@ pub fn logo<'a>(transform: Transform, t: f32) -> Svgr<'a> {
     svgr!(
         <g transform={transform}>
             <g transform={place(512., 512., 1024., 1024., tile, 0.)} opacity={clamp01(tile * 2.)}>
-                <rect y="18" width="1024" height="1024" rx="225" fill="#0e1442" opacity={0.45} />
+                <rect y="18" width="1024" height="1024" rx="225" fill="#04252b" opacity={0.45} />
                 <rect width="1024" height="1024" rx="225" fill="url(#icon-bg)" />
-                <rect x="113.9" y="113.9" width="796.3" height="796.3" rx="61.4" fill="#1b2556" />
+                <rect x="113.9" y="113.9" width="796.3" height="796.3" rx="61.4" fill="#0a2f38" />
             </g>
             {blocks}
         </g>
@@ -214,17 +214,17 @@ pub const PHONE_H: f32 = 876.;
 pub fn phone<'a>(transform: Transform, screen: Svgr<'a>, opacity: f32) -> Svgr<'a> {
     svgr!(
         <g transform={transform} opacity={opacity}>
-            <rect x="10" y="44" width="402" height="840" rx="70" fill="#060a24" opacity={0.55} filter="url(#soft-shadow)" />
-            <rect x="-4" y="190" width="6" height="62" rx="3" fill="#2a3474" />
-            <rect x="-4" y="270" width="6" height="96" rx="3" fill="#2a3474" />
-            <rect x="420" y="230" width="6" height="120" rx="3" fill="#2a3474" />
-            <rect width="422" height="876" rx="64" fill="#0b1030" />
-            <rect x="1.5" y="1.5" width="419" height="873" rx="62.5" fill="none" stroke="#4a58b8" stroke-width="3" />
+            <rect x="10" y="44" width="402" height="840" rx="70" fill="#021014" opacity={0.55} filter="url(#soft-shadow)" />
+            <rect x="-4" y="190" width="6" height="62" rx="3" fill="#1d5a62" />
+            <rect x="-4" y="270" width="6" height="96" rx="3" fill="#1d5a62" />
+            <rect x="420" y="230" width="6" height="120" rx="3" fill="#1d5a62" />
+            <rect width="422" height="876" rx="64" fill="#031c22" />
+            <rect x="1.5" y="1.5" width="419" height="873" rx="62.5" fill="none" stroke="#2f8a8f" stroke-width="3" />
             <g clip-path="url(#phone-screen)">
-                <rect x="16" y="16" width="390" height="844" fill="#2f43ab" />
+                <rect x="16" y="16" width="390" height="844" fill="#137a80" />
                 {screen}
             </g>
-            <circle cx="211" cy="8.5" r="3.5" fill="#1d2552" />
+            <circle cx="211" cy="8.5" r="3.5" fill="#0d3238" />
         </g>
     )
 }
@@ -242,19 +242,19 @@ pub const BROWSER_H: f32 = 740.;
 pub fn browser<'a>(transform: Transform, opacity: f32) -> Svgr<'a> {
     svgr!(
         <g transform={transform} opacity={opacity}>
-            <rect x="10" y="40" width="1080" height="720" rx="24" fill="#060a24" opacity={0.5} filter="url(#soft-shadow)" />
+            <rect x="10" y="40" width="1080" height="720" rx="24" fill="#021014" opacity={0.5} filter="url(#soft-shadow)" />
             <g clip-path="url(#browser-window)">
-                <rect width="1100" height="740" fill="#2f43ab" />
+                <rect width="1100" height="740" fill="#137a80" />
                 <image href="desktop.png" y="52" width="1100" height="688" preserveAspectRatio="xMidYMid slice" />
-                <rect width="1100" height="52" fill="#141a44" />
-                <circle cx="28" cy="26" r="7" fill="#ef4b5a" />
-                <circle cx="52" cy="26" r="7" fill="#f6cd30" />
-                <circle cx="76" cy="26" r="7" fill="#4cc85d" />
-                <rect x="300" y="11" width="500" height="30" rx="15" fill="#232c66" />
-                <path d="M 326 24 v -3 a 5 5 0 0 1 10 0 v 3 M 323 24 h 16 v 10 h -16 z" fill="none" stroke="#b9c3f5" stroke-width="2" />
-                <text x={550.} y="32.5" text-anchor="middle" font-family="Baloo 2" font-weight="600" font-size="17" fill="#d8defc">"noartem.github.io/block-baster"</text>
+                <rect width="1100" height="52" fill="#0a2a30" />
+                <circle cx="28" cy="26" r="7" fill="#ff6f61" />
+                <circle cx="52" cy="26" r="7" fill="#ffd23f" />
+                <circle cx="76" cy="26" r="7" fill="#8bd346" />
+                <rect x="300" y="11" width="500" height="30" rx="15" fill="#134049" />
+                <path d="M 326 24 v -3 a 5 5 0 0 1 10 0 v 3 M 323 24 h 16 v 10 h -16 z" fill="none" stroke="#c8f1ec" stroke-width="2" />
+                <text x={550.} y="32.5" text-anchor="middle" font-family="Baloo 2" font-weight="600" font-size="17" fill="#d6f5f1">"noartem.github.io/block-baster"</text>
             </g>
-            <rect x="1" y="1" width="1098" height="738" rx="16" fill="none" stroke="#4a58b8" stroke-width="2" />
+            <rect x="1" y="1" width="1098" height="738" rx="16" fill="none" stroke="#2f8a8f" stroke-width="2" />
         </g>
     )
 }
@@ -268,7 +268,7 @@ pub fn pill<'a>(cx: f32, cy: f32, w: f32, text: &'a str, fill: &'a str, color: &
     let h = 64.;
     svgr!(
         <g transform={place(cx, cy, w, h, scale, 0.)} opacity={opacity}>
-            <rect y="6" width={w} height={h} rx="32" fill="#0b1030" opacity={0.35} />
+            <rect y="6" width={w} height={h} rx="32" fill="#031c22" opacity={0.35} />
             <rect width={w} height={h} rx="32" fill={fill} />
             <text x={w / 2.} y="43" text-anchor="middle" font-family="Baloo 2" font-weight="800" font-size="30" fill={color}>{text}</text>
         </g>

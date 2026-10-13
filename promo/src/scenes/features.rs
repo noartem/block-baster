@@ -19,12 +19,12 @@ enum Icon {
 }
 
 const CARDS: [(usize, Icon, &str, &str); 6] = [
-    (RED, Icon::NoAds, "No ads. Ever.", "Not a single banner or video."),
-    (PURPLE, Icon::NoTracking, "No tracking", "No accounts, no analytics."),
-    (CYAN, Icon::Offline, "Plays offline", "No network needed at all."),
-    (GREEN, Icon::Fair, "Fair dealing", "Every hand can be placed."),
-    (ORANGE, Icon::Save, "Auto-save", "Pick up where you left off."),
-    (BLUE, Icon::Code, "Open source", "MIT licensed on GitHub."),
+    (CORAL, Icon::NoAds, "No ads. Ever.", "Not a single banner or video."),
+    (MAGENTA, Icon::NoTracking, "No tracking", "No accounts, no analytics."),
+    (SKY, Icon::Offline, "Plays offline", "No network needed at all."),
+    (LIME, Icon::Fair, "Fair dealing", "Every hand can be placed."),
+    (TANGERINE, Icon::Save, "Auto-save", "Pick up where you left off."),
+    (GRAPE, Icon::Code, "Open source", "MIT licensed on GitHub."),
 ];
 
 /// White line icon in a 48x48 box.

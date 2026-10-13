@@ -14,13 +14,14 @@ use fframes::{
     AudioMap, AudioTimestamp, AudioTrack, Color, Duration, EncoderOptions, FFramesContext, Frame, MediaDirectory, RenderOptions, Scene,
     Scenes, Svgr, Video, svgr,
 };
-use scenes::{Anywhere, Best, Features, Gameplay, Intro, Outro, Touch};
+use scenes::{Anywhere, Best, Features, Gameplay, Intro, Outro, Styles, Touch};
 use std::path::Path;
 use std::process::ExitCode;
 
 struct Promo {
     intro: Intro,
     gameplay: Gameplay,
+    styles: Styles,
     features: Features,
     best: Best,
     anywhere: Anywhere,
@@ -38,7 +39,7 @@ impl Video for Promo {
     }
 
     fn define_scenes(&self) -> Scenes<'_> {
-        let scenes: Vec<&dyn Scene> = vec![&self.intro, &self.gameplay, &self.features, &self.best, &self.anywhere, &self.outro];
+        let scenes: Vec<&dyn Scene> = vec![&self.intro, &self.gameplay, &self.styles, &self.features, &self.best, &self.anywhere, &self.outro];
         Scenes::from(scenes)
     }
 
@@ -52,31 +53,31 @@ impl Video for Promo {
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width={Self::WIDTH} height={Self::HEIGHT}>
                 <defs>
                     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stop-color="#4560d6" />
-                        <stop offset="0.5" stop-color="#2f43ab" />
-                        <stop offset="1" stop-color="#1d2770" />
+                        <stop offset="0" stop-color="#1fa2a0" />
+                        <stop offset="0.5" stop-color="#137a80" />
+                        <stop offset="1" stop-color="#0a4250" />
                     </linearGradient>
                     <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
-                        <stop offset="0" stop-color="#7d93ff" stop-opacity="0.55" />
-                        <stop offset="1" stop-color="#7d93ff" stop-opacity="0" />
+                        <stop offset="0" stop-color="#6fe3d6" stop-opacity="0.55" />
+                        <stop offset="1" stop-color="#6fe3d6" stop-opacity="0" />
                     </radialGradient>
                     <radialGradient id="vignette" cx="0.5" cy="0.5" r="0.75">
-                        <stop offset="0.6" stop-color="#0b1030" stop-opacity="0" />
-                        <stop offset="1" stop-color="#0b1030" stop-opacity="0.55" />
+                        <stop offset="0.6" stop-color="#031c22" stop-opacity="0" />
+                        <stop offset="1" stop-color="#031c22" stop-opacity="0.55" />
                     </radialGradient>
                     <linearGradient id="icon-bg" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stop-color="#4f6be0" />
-                        <stop offset="1" stop-color="#232f80" />
+                        <stop offset="0" stop-color="#22b0ac" />
+                        <stop offset="1" stop-color="#0b4f5c" />
                     </linearGradient>
                     <linearGradient id="gold-gradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stop-color="#ffe066" />
-                        <stop offset="1" stop-color="#ffb627" />
+                        <stop offset="0" stop-color="#ffd27a" />
+                        <stop offset="1" stop-color="#ff9f1c" />
                     </linearGradient>
                     <filter id="soft-shadow" x="-30%" y="-30%" width="160%" height="160%">
                         <feGaussianBlur stdDeviation="28" />
                     </filter>
                     <filter id="text-shadow" x="-10%" y="-30%" width="120%" height="160%">
-                        <feDropShadow dx="0" dy="6" stdDeviation="0" flood-color="#0b1030" flood-opacity="0.35" />
+                        <feDropShadow dx="0" dy="6" stdDeviation="0" flood-color="#031c22" flood-opacity="0.35" />
                     </filter>
                     <clipPath id="block-clip">
                         <rect width="100" height="100" rx="10" />
@@ -139,6 +140,7 @@ fn main() -> ExitCode {
     let video = Promo {
         intro: Intro,
         gameplay: Gameplay { touch: load_touch(&root.join("media/gameplay-touch.json")) },
+        styles: Styles,
         features: Features,
         best: Best,
         anywhere: Anywhere,

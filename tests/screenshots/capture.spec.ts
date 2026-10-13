@@ -134,16 +134,16 @@ test('showcase banner', async ({ page }) => {
     @font-face { font-family: 'Baloo 2'; font-weight: 600; src: url(data:font/woff2;base64,${font(600)}) format('woff2'); }
     * { box-sizing: border-box; margin: 0; }
     body { width: 1600px; height: 900px; overflow: hidden; font-family: 'Baloo 2', sans-serif; color: #fff;
-      background: radial-gradient(circle at 20% 15%, #5d78ee 0%, #3a4fc0 35%, #1f2a78 100%); display: flex; align-items: center; }
+      background: radial-gradient(circle at 20% 15%, #2ec2bd 0%, #168a8e 35%, #0a3f4a 100%); display: flex; align-items: center; }
     .copy { width: 560px; padding-left: 90px; }
     .copy img { width: 120px; height: 120px; filter: drop-shadow(0 10px 20px rgba(0,0,0,.35)); }
     h1 { font-size: 92px; font-weight: 800; line-height: .95; margin: 22px 0 18px; text-shadow: 0 6px 0 rgba(0,0,0,.25); }
-    p { font-size: 30px; font-weight: 600; color: #c9d3ff; line-height: 1.3; }
+    p { font-size: 30px; font-weight: 600; color: #c8f1ec; line-height: 1.3; }
     .pills { display: flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
-    .pill { background: #ffcf3f; color: #4a2a00; border-radius: 999px; padding: 6px 20px; font-size: 24px; font-weight: 800; box-shadow: 0 4px 0 #e39b12; }
+    .pill { background: #ffb547; color: #4a2a00; border-radius: 999px; padding: 6px 20px; font-size: 24px; font-weight: 800; box-shadow: 0 4px 0 #b88233; }
     .phones { position: relative; flex: 1; height: 900px; }
-    .phone { position: absolute; top: 50%; width: 330px; padding: 12px; border-radius: 48px; background: #0d1233;
-      box-shadow: 0 30px 60px rgba(0,0,0,.45), inset 0 0 0 3px #2b346e; }
+    .phone { position: absolute; top: 50%; width: 330px; padding: 12px; border-radius: 48px; background: #061b20;
+      box-shadow: 0 30px 60px rgba(0,0,0,.45), inset 0 0 0 3px #1d4a52; }
     .phone img { display: block; width: 100%; border-radius: 38px; }
     .p1 { left: 20px;  transform: translateY(-50%) rotate(-7deg) scale(.9); }
     .p2 { left: 330px; transform: translateY(-52%); z-index: 2; }

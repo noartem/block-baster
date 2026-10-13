@@ -47,7 +47,7 @@ impl Scene for Best {
                 </g>
                 {burst(t, 2.35, 1640., 690., 260., 12)}
                 <g transform={place(1640., 690., 330., 80., stamp.max(0.) * 1.0, -7.)} opacity={clamp01(stamp * 3.)}>
-                    <rect y="7" width="330" height="80" rx="40" fill="#0b1030" opacity={0.35} />
+                    <rect y="7" width="330" height="80" rx="40" fill="#031c22" opacity={0.35} />
                     <rect width="330" height="80" rx="40" fill="url(#gold-gradient)" />
                     <text x={165.} y="55" text-anchor="middle" font-family="Baloo 2" font-weight="800" font-size="40" fill="#3b2600">"NEW BEST!"</text>
                 </g>

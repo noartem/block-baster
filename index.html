@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#2b3a99" />
+    <meta name="theme-color" content="#137a80" />
     <meta name="description" content="Block Baster: a free, open-source, ad-free block puzzle game. Drag blocks onto the board and clear rows and columns." />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
@@ -16,7 +16,13 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 11H5L3 7z" /></svg>
           <span id="best">0</span>
         </div>
-        <div class="score" id="score" aria-live="polite">0</div>
+        <div class="center">
+          <div class="score" id="score" aria-live="polite">0</div>
+          <div class="style-info" id="style-info">
+            <span class="style-name" id="style-name">Classic · Lagoon</span>
+            <span class="tier"><span class="tier-track"><i id="tier-bar"></i></span><span id="tier-next">50k</span></span>
+          </div>
+        </div>
         <button class="icon-btn" id="menu-btn" aria-label="Menu">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
@@ -38,6 +44,7 @@
         <details class="help">
           <summary>How to play</summary>
           <p>Drag the pieces onto the 8×8 board. Fill a whole row or column to clear it. Clear several lines at once, or keep clearing on consecutive turns, for combo bonuses. The game ends when none of your pieces fit.</p>
+          <p>Clear the whole board to switch to a new look. Score 50k, 100k, 200k, 500k and 1M points in one game to unlock fancier styles, with new blocks, effects, fonts and sounds.</p>
         </details>
         <button class="btn" id="exit-btn" hidden>Exit</button>
         <p class="about">Free &amp; open source · no ads · no tracking<br /><a href="https://github.com/noartem/block-baster" target="_blank" rel="noopener">github.com/noartem/block-baster</a> · v<span id="version"></span></p>

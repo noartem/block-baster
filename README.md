@@ -14,6 +14,12 @@
 
 </div>
 
+## Promo video
+
+<a href="https://github.com/noartem/block-baster/releases/latest/download/block-baster-promo.mp4"><img src="https://github.com/noartem/block-baster/releases/latest/download/promo-poster.jpg" alt="Promo video: the six Block Baster style levels side by side, from Classic to Legendary. Click to watch." width="100%"></a>
+
+**[▶️ Watch the 40-second promo video](https://github.com/noartem/block-baster/releases/latest/download/block-baster-promo.mp4)** (MP4, 1080p). It is rendered in CI from real gameplay of the current build; see [`promo/`](promo/README.md).
+
 <table>
 <tr>
 <td width="45%"><img src="https://github.com/noartem/block-baster/releases/latest/download/gameplay.gif" alt="Gameplay recording: pieces are dragged onto the board and full lines burst away" width="100%"></td>
@@ -26,7 +32,8 @@ Clear several lines at once, or keep clearing turn after turn, to build **combos
 The game ends when nothing fits.
 
 - 🎯 **Fair**: every new set of pieces can always be placed somehow
-- ✨ Juicy effects, synthesized sounds and haptics
+- 💥 Juicy effects, synthesized sounds and haptics
+- ✨ Six style levels unlocked at 50k, 100k, 200k, 500k and 1M points, each with new blocks, effects, fonts and sounds; clearing the whole board switches the colours
 - 💾 Your game and best score are saved automatically
 - 📴 Works offline, installs as an app on any device
 - 🚫 No ads, no tracking, no network needed
@@ -54,6 +61,7 @@ npm run dev           # play locally with hot reload
 npm test              # unit tests (Vitest)
 npm run test:e2e      # browser tests (Playwright)
 npm run screenshots   # regenerate the README media into screenshots/
+# promo video: see promo/README.md (Playwright capture + Rust/fframes render)
 npm run android:apk   # build the APK (needs JDK 21 + Android SDK)
 ```
 
@@ -67,11 +75,12 @@ Everything is drawn and synthesized by code: blocks, icons and splash screens co
 
 | Trigger | What happens |
 | --- | --- |
-| Pull request | typecheck, unit and browser tests, README media capture, APK build (all downloadable as workflow artifacts) |
-| Push to `main` | the same, then a GitHub Release `v<version>-build.<run>` with the APK, screenshots and GIF, plus a GitHub Pages deploy |
+| Pull request | typecheck, unit and browser tests, README media capture, APK build, promo video render (all downloadable as workflow artifacts) |
+| Push to `main` | the same, then a GitHub Release `v<version>-build.<run>` with the APK, screenshots, GIF and promo video, plus a GitHub Pages deploy |
 | `v*` tag | the same checks, then a release under that tag |
 
 The images in this README are captured from the real game in CI ([`tests/screenshots`](tests/screenshots/capture.spec.ts)) and served from the latest release, so they always match the current build.
+The promo video gets its own job: it re-captures the game footage, synthesises the soundtrack and renders the video with [fframes](promo/README.md). The finished MP4 is not stored in git; it lives in the releases (and as a workflow artifact on pull requests).
 
 **Signing.** APKs are signed with the public `android/app/debug.keystore` by default. To sign with your own private key, add the repository secrets
 `ANDROID_KEYSTORE_BASE64` (`base64 -w0 release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`.
@@ -83,5 +92,5 @@ Android won't update an app signed with a different key, so uninstall the old bu
 
 ## Credits
 
-Code under the [MIT license](LICENSE). Font: [Baloo 2](https://github.com/EkType/Baloo2) (SIL OFL).
+Code under the [MIT license](LICENSE). Fonts: [Baloo 2](https://github.com/EkType/Baloo2), [Lilita One](https://fonts.google.com/specimen/Lilita+One), [Orbitron](https://github.com/theleagueof/orbitron), [Righteous](https://fonts.google.com/specimen/Righteous) and [Cinzel Decorative](https://fonts.google.com/specimen/Cinzel+Decorative) (all SIL OFL).
 Block Baster is an independent fan project and is not affiliated with the makers of *Block Blast*.

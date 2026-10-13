@@ -1,15 +1,18 @@
 # Block Baster promo video
 
-A 33-second marketing video for Block Baster, written in Rust with [fframes](https://fframes.studio).
+A 39-second marketing video for Block Baster, written in Rust with [fframes](https://fframes.studio).
 Every screen in it is real. The screenshots and the gameplay recording come from the actual game,
 driven by Playwright.
 
-**Result:** [`block-baster-promo.mp4`](block-baster-promo.mp4) (1920×1080, 30 fps, H.264 + AAC)
+**Result:** [`block-baster-promo.mp4`](https://github.com/noartem/block-baster/releases/latest/download/block-baster-promo.mp4) (1920×1080, 30 fps, H.264 + AAC).
+CI renders it from every commit (the *Promo video* job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) and attaches it to each
+GitHub release. The rendered file is not kept in git.
 
 | Scene | What happens |
 | --- | --- |
 | Intro | The app icon builds itself from falling blocks, then the name and the promise appear: *the block puzzle without the ads* |
-| Gameplay | A real gameplay recording plays on a phone, with a touch indicator. The headline follows the moves: *Drag. Drop. Blast!*, *Chain combos.*, *Clear the whole board.* |
+| Gameplay | A real gameplay recording plays on a phone, with a touch indicator. The headline follows the moves: *Drag. Drop. Blast!*, *Chain combos.*, *Clear the whole board.* The board clear switches the game to a new colour style |
+| Styles | The six style levels (Classic, Candy, Gems, Neon, Aurora, Legendary) pop up side by side with the score that unlocks each one |
 | Features | The game's pause menu next to six cards: no ads, no tracking, offline, fair dealing, auto-save, open source |
 | Best score | The game over screen with a new record, and a counter racing up to it |
 | Anywhere | The game in a desktop browser and on a phone, plus where to get it |
@@ -48,8 +51,9 @@ python3 promo/capture/fonts.py
 python3 promo/audio/music.py
 ```
 
-If the gameplay clip changes length, update `CLIP_LENGTH` in `src/scenes/gameplay.rs`. If the
-moves happen on different frames, update the sound-effect frames in `audio/music.py`.
+If the gameplay clip changes length, update `CLIP_LENGTH` in `src/scenes/gameplay.rs` and `CLIP_FRAMES`
+in `audio/music.py`. If the moves happen on different frames, update the sound-effect frames in
+`audio/music.py`. Scene lengths in `audio/music.py` must match the `DURATION` of each scene.
 
 ## Rendering
 
@@ -60,7 +64,9 @@ FFmpeg, and if that build doesn't match your x264 version it compiles FFmpeg fro
 ```bash
 cd promo
 cargo run --release -- render                   # writes block-baster-promo.mp4
-# If linking fails with "undefined symbol: x264_encoder_open_…", build FFmpeg from source once:
+# If linking fails with "undefined symbol: x264_encoder_open_…", build FFmpeg from source once
+# (clean the crate first if a prebuilt FFmpeg was already unpacked; CI always builds from source):
+cargo clean --release -p ffmpeg-sys-fframes
 FFMPEG_FORCE_BUILD=1 cargo run --release -- render
 ```
 

@@ -40,7 +40,7 @@ impl Scene for Outro {
                     <text x={0.} y="0" text-anchor="middle" font-family="Baloo 2" font-weight="700" font-size="50" fill={MUTED}>"Free. No ads. Open source."</text>
                 </g>
                 <g transform={place(960., 770., 760., 96., cta.max(0.) * pulse, 0.)} opacity={clamp01(cta * 2.)}>
-                    <rect y="9" width="760" height="96" rx="48" fill="#0b1030" opacity={0.35} />
+                    <rect y="9" width="760" height="96" rx="48" fill="#031c22" opacity={0.35} />
                     <rect width="760" height="96" rx="48" fill="url(#gold-gradient)" />
                     <path d="M 56 30 L 86 48 L 56 66 Z" fill="#3b2600" stroke="#3b2600" stroke-width="6" stroke-linejoin="round" />
                     <text x={410.} y="63" text-anchor="middle" font-family="Baloo 2" font-weight="800" font-size="44" fill="#3b2600">"noartem.github.io/block-baster"</text>
