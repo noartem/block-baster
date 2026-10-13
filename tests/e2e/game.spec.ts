@@ -1,11 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
 
-declare global {
-  interface Window {
-    blockBaster: import('../../src/app').BlockBasterApp;
-  }
-}
-
 async function open(page: Page, query = '?seed=12345&reset') {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));

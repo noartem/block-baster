@@ -18,7 +18,8 @@
     "test:e2e": "playwright test",
     "assets": "node scripts/generate-assets.mjs",
     "android:sync": "npm run build && cap sync android",
-    "android:apk": "npm run android:sync && cd android && ./gradlew assembleRelease"
+    "android:apk": "npm run android:sync && cd android && ./gradlew assembleRelease",
+    "screenshots": "playwright test -c playwright.screenshots.config.ts"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.3",

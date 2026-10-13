@@ -1,7 +1,7 @@
 name: CI/CD
 
-# Pull requests: typecheck, tests and an APK build (downloadable as a workflow artifact).
-# Push to main: the same, then publish a GitHub Release with the APK and deploy the web version.
+# Pull requests: typecheck, tests, README screenshots and an APK build (downloadable as workflow artifacts).
+# Push to main: the same, then publish a GitHub Release with the APK and screenshots, and deploy the web version.
 # Push a v* tag: publish a release under that tag.
 on:
   push:
@@ -33,6 +33,17 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+      - name: Capture README screenshots and gameplay GIF
+        run: |
+          command -v ffmpeg >/dev/null || (sudo apt-get update -q && sudo apt-get install -yq ffmpeg)
+          npm run screenshots
+      - uses: actions/upload-artifact@v5
+        with:
+          name: screenshots
+          path: |
+            screenshots/*.png
+            screenshots/*.gif
+          retention-days: 30
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
@@ -103,6 +114,9 @@ jobs:
       - uses: actions/download-artifact@v5
         with:
           name: block-baster-apk
+      - uses: actions/download-artifact@v5
+        with:
+          name: screenshots
       - name: Pick release tag
         id: tag
         env:
@@ -120,7 +134,12 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.name }}
           target_commitish: ${{ github.sha }}
-          files: block-baster.apk
+          # The README embeds the media below via releases/latest/download/<file>.
+          files: |
+            block-baster.apk
+            showcase.png
+            gameplay.gif
+            screenshot-*.png
           make_latest: true
           generate_release_notes: true
           body: |
