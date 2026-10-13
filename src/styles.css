@@ -2,36 +2,36 @@
 @property --bg-top {
   syntax: '<color>';
   inherits: true;
-  initial-value: #4560d6;
+  initial-value: #1fa2a0;
 }
 
 @property --bg-mid {
   syntax: '<color>';
   inherits: true;
-  initial-value: #2f43ab;
+  initial-value: #137a80;
 }
 
 @property --bg-bottom {
   syntax: '<color>';
   inherits: true;
-  initial-value: #232f80;
+  initial-value: #0b4f5c;
 }
 
 /* Defaults match the Classic style; the app overrides them for each style (see src/render/styles.ts). */
 :root {
-  --bg-top: #4560d6;
-  --bg-mid: #2f43ab;
-  --bg-bottom: #232f80;
-  --card: #26338a;
-  --card-edge: #17205e;
-  --accent: #ffcf3f;
-  --accent-dark: #e39b12;
-  --btn: #3b4cb3;
-  --btn-edge: #1d2770;
-  --glow: #7ee8ff;
+  --bg-top: #1fa2a0;
+  --bg-mid: #137a80;
+  --bg-bottom: #0b4f5c;
+  --card: #0f5e66;
+  --card-edge: #073a40;
+  --accent: #ffb547;
+  --accent-dark: #b88233;
+  --btn: #317a81;
+  --btn-edge: #061f26;
+  --glow: #9ff5e6;
   --glow2: #ffffff;
   --text: #ffffff;
-  --muted: #b9c3f5;
+  --muted: rgba(255, 255, 255, 0.72);
   --font: 'Baloo 2', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-display: var(--font);
   --font-display-weight: 800;
@@ -217,7 +217,7 @@ body[data-tier='5'] .score {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(10, 14, 45, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 10;

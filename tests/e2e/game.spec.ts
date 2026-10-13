@@ -141,7 +141,7 @@ test('shows the game over screen and starts a new game', async ({ page }) => {
 test('clearing the board switches the style and high scores unlock new tiers', async ({ page }) => {
   const errors = await open(page);
   await expect(page.locator('body')).toHaveAttribute('data-style', '0.0');
-  await expect(page.locator('#style-name')).toHaveText('Classic · Sapphire');
+  await expect(page.locator('#style-name')).toHaveText('Classic · Lagoon');
   await page.evaluate(() => {
     const app = window.blockBaster;
     for (let c = 0; c < 7; c++) app.game.board[c] = 2;
@@ -149,7 +149,7 @@ test('clearing the board switches the style and high scores unlock new tiers', a
     app.commit(0, 0, 7);
   });
   await expect(page.locator('body')).toHaveAttribute('data-style', '0.1');
-  await expect(page.locator('#style-name')).toHaveText('Classic · Meadow');
+  await expect(page.locator('#style-name')).toHaveText('Classic · Ember');
 
   await page.evaluate(() => {
     const app = window.blockBaster;

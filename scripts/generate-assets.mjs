@@ -13,7 +13,7 @@ const out = (p) => {
   return file;
 };
 
-const COLORS = ['#ef4b5a', '#f7962f', '#f6cd30', '#4cc85d', '#2fbde8', '#4f6ef2', '#a75ae6'];
+const COLORS = ['#ff6f61', '#ff9f1c', '#ffd23f', '#8bd346', '#41a6f6', '#8b5cf6', '#e85d9f'];
 
 function mix(hex, amount) {
   const n = parseInt(hex.slice(1), 16);
@@ -65,22 +65,22 @@ function logo(size, scale, { background = true, round = 0.22 } = {}) {
     .map(([r, c, k]) => block(o + c * cell + cell * 0.03, o + r * cell + cell * 0.03, cell * 0.94, COLORS[k]))
     .join('');
   const bg = background
-    ? `<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4f6be0"/><stop offset="1" stop-color="#232f80"/></linearGradient></defs>
+    ? `<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22b0ac"/><stop offset="1" stop-color="#0b4f5c"/></linearGradient></defs>
        <rect width="${size}" height="${size}" rx="${size * round}" fill="url(#bg)"/>
-       <rect x="${o - cell * 0.12}" y="${o - cell * 0.12}" width="${art + cell * 0.24}" height="${art + cell * 0.24}" rx="${cell * 0.25}" fill="#1b2556"/>`
+       <rect x="${o - cell * 0.12}" y="${o - cell * 0.12}" width="${art + cell * 0.24}" height="${art + cell * 0.24}" rx="${cell * 0.25}" fill="#0a2f38"/>`
     : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}${blocks}</svg>`;
 }
 
 function backgroundOnly(size) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4f6be0"/><stop offset="1" stop-color="#232f80"/></linearGradient></defs><rect width="${size}" height="${size}" fill="url(#bg)"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22b0ac"/><stop offset="1" stop-color="#0b4f5c"/></linearGradient></defs><rect width="${size}" height="${size}" fill="url(#bg)"/></svg>`;
 }
 
 function splash(w, h) {
   const s = Math.min(w, h) * 0.32;
   const inner = logo(s, 0.86, { round: 0.22 }).replace(/<svg[^>]*>|<\/svg>/g, '');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-    <defs><linearGradient id="sbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4560d6"/><stop offset="0.5" stop-color="#2f43ab"/><stop offset="1" stop-color="#232f80"/></linearGradient></defs>
+    <defs><linearGradient id="sbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1fa2a0"/><stop offset="0.5" stop-color="#137a80"/><stop offset="1" stop-color="#0b4f5c"/></linearGradient></defs>
     <rect width="${w}" height="${h}" fill="url(#sbg)"/>
     <g transform="translate(${(w - s) / 2},${(h - s) / 2 - s * 0.15})">${inner}</g>
     <text x="${w / 2}" y="${(h + s) / 2 + s * 0.12}" font-family="Arial Rounded MT Bold, Arial, sans-serif" font-weight="900" font-size="${s * 0.2}" fill="#fff" text-anchor="middle">BLOCK BASTER</text>

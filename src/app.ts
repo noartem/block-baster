@@ -402,7 +402,7 @@ export class BlockBasterApp {
         s.texts.push({ text: word, x: this.layout.width / 2, y: mid, size: cell * 0.95, color: this.bannerColor(), start: now + 80, duration: 1100, banner: true });
       }
       if (res.combo >= 2) {
-        s.texts.push({ text: `Combo ${res.combo}`, x: this.layout.width / 2, y: mid + cell * 1.05, size: cell * 0.62, color: this.scene.style.tier.level === 0 ? '#7ee8ff' : palette.glow, start: now + 80, duration: 1100, banner: true });
+        s.texts.push({ text: `Combo ${res.combo}`, x: this.layout.width / 2, y: mid + cell * 1.05, size: cell * 0.62, color: palette.glow, start: now + 80, duration: 1100, banner: true });
       }
     }
 
@@ -421,9 +421,8 @@ export class BlockBasterApp {
     return res;
   }
 
-  /** Classic keeps its original yellow; other styles use their accent. */
   private bannerColor(): string {
-    return this.scene.style.tier.level === 0 ? '#ffe066' : this.scene.style.palette.accent;
+    return this.scene.style.palette.accent;
   }
 
   private burst(x: number, y: number, color: string, now: number, count?: number, speed = 1): void {

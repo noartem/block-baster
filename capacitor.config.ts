@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: 'io.github.noartem.blockbaster',
   appName: 'Block Baster',
   webDir: 'dist',
-  backgroundColor: '#2f43ab',
+  backgroundColor: '#137a80',
   android: {
     // Everything ships inside the APK; the game never needs the network.
     allowMixedContent: false,

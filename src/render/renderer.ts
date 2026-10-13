@@ -559,7 +559,7 @@ export class Renderer {
       if (fit < 1) ctx.scale(fit, fit);
       ctx.lineJoin = 'round';
       ctx.lineWidth = Math.max(3, ft.size * 0.14);
-      ctx.strokeStyle = tier.level === 0 ? 'rgba(20,24,60,0.85)' : rgba(palette.boardEdge, 0.9);
+      ctx.strokeStyle = rgba(palette.boardEdge, 0.9);
       if (tier.textGlow) {
         ctx.shadowColor = palette.glow;
         ctx.shadowBlur = ft.size * 0.45;

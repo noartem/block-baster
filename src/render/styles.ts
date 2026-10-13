@@ -95,7 +95,7 @@ export interface Style {
 const FALLBACK_FONTS = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const font = (family: string) => `'${family}', 'Baloo 2', ${FALLBACK_FONTS}`;
 
-const CLASSIC_BLOCKS = ['#ef4b5a', '#f7962f', '#f6cd30', '#4cc85d', '#2fbde8', '#4f6ef2', '#a75ae6'];
+const CLASSIC_BLOCKS = ['#ff6f61', '#ff9f1c', '#ffd23f', '#8bd346', '#41a6f6', '#8b5cf6', '#e85d9f'];
 const CANDY_BLOCKS = ['#ff5d8f', '#ff9f43', '#ffd93d', '#5fd97f', '#4fd3ff', '#7b8cff', '#c77dff'];
 const GEM_BLOCKS = ['#e0115f', '#ff8c1a', '#ffd21f', '#14c46b', '#1fd1e0', '#2456e8', '#9b30ff'];
 const NEON_BLOCKS = ['#ff2a6d', '#ff8a00', '#f9f871', '#39ff14', '#05d9e8', '#4d6bff', '#e100d4'];
@@ -117,32 +117,32 @@ export const TIERS: Tier[] = [
     sound: { lead: 'square', root: 392, scale: [0, 4, 7, 12, 16, 19, 24], echo: 0, bell: false, pad: false, thud: 180 },
     variants: [
       {
-        name: 'Sapphire',
+        name: 'Lagoon',
         blocks: CLASSIC_BLOCKS,
-        board: '#1b2556',
-        boardEdge: '#121a40',
-        cell: '#232f68',
-        cellInner: '#1f2a5f',
-        bg: ['#4560d6', '#2f43ab', '#232f80'],
-        accent: '#ffcf3f',
-        glow: '#7ee8ff',
+        board: '#0a2f38',
+        boardEdge: '#061f26',
+        cell: '#0f3d48',
+        cellInner: '#0d3640',
+        bg: ['#1fa2a0', '#137a80', '#0b4f5c'],
+        accent: '#ffb547',
+        glow: '#9ff5e6',
         glow2: '#ffffff',
-        card: '#26338a',
-        cardEdge: '#17205e',
+        card: '#0f5e66',
+        cardEdge: '#073a40',
       },
       {
-        name: 'Meadow',
+        name: 'Ember',
         blocks: CLASSIC_BLOCKS,
-        board: '#123f3a',
-        boardEdge: '#0b2c28',
-        cell: '#18504a',
-        cellInner: '#154842',
-        bg: ['#33b394', '#208a72', '#155f52'],
+        board: '#2e130f',
+        boardEdge: '#1e0b08',
+        cell: '#3d1b15',
+        cellInner: '#361712',
+        bg: ['#e8794a', '#b84f33', '#6e2a22'],
         accent: '#ffd84a',
-        glow: '#b6ff8a',
+        glow: '#ffc59a',
         glow2: '#ffffff',
-        card: '#1b6b5c',
-        cardEdge: '#0f4a40',
+        card: '#7a3324',
+        cardEdge: '#3e160f',
       },
       {
         name: 'Sunset',
