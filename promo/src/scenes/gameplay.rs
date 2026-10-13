@@ -19,8 +19,8 @@ pub struct Gameplay {
 
 /// When the clip starts playing, relative to the scene (the phone slides in first).
 const CLIP_START: f32 = 0.45;
-/// Length of `gameplay.mp4` (244 frames at 30 fps).
-const CLIP_LENGTH: f32 = 244. / 30.;
+/// Length of `gameplay.mp4` (268 frames at 30 fps).
+const CLIP_LENGTH: f32 = 268. / 30.;
 const DURATION: f32 = CLIP_START + CLIP_LENGTH;
 
 impl Scene for Gameplay {
@@ -66,7 +66,8 @@ impl Scene for Gameplay {
         let tilt = lerp(-8., 0., enter) + 0.6 * (t * 1.3).sin();
         let phone = phone(place(1350., phone_y, PHONE_W, PHONE_H, 1.04, tilt), svgr!(<g>{screen}{finger}</g>), 1.);
 
-        // Text beats follow the clip: first drop at 1.6 s, combo at 3.7 s, board clear at 6.8 s.
+        // Text beats follow the clip: first drop at 1.6 s, combo at 3.7 s, board clear at 6.1 s,
+        // and the board-clear style switch from 6.6 s.
         let drag_drop_blast = exit(
             c,
             3.25,
@@ -101,7 +102,8 @@ impl Scene for Gameplay {
                 <g>
                     {headline(c, 5.85, 200., 430., 128., "#ffffff", "Clear the")}
                     {headline(c, 6.0, 200., 570., 128., "url(#gold-gradient)", "whole board.")}
-                    {pill(380., 690., 360., "+300 BONUS", "#7ee8ff", "#0b1f4a", badge.max(0.), clamp01(badge * 3.))}
+                    {pill(380., 690., 360., "+300 BONUS", "#9ff5e6", "#063a3a", badge.max(0.), clamp01(badge * 3.))}
+                    {caption(c, 7.05, 206., 820., "...and the board gets a fresh look.")}
                 </g>
             )
         } else {

@@ -7,6 +7,7 @@
 //
 // Output (all in promo/media):
 //   screen-*.png         phone screenshots (390x844 CSS px at 2x)
+//   screen-style-N.png   the same position in each of the six style levels
 //   desktop.png          the game in a desktop browser window
 //   gameplay.mp4         30 fps gameplay clip, encoded with the system ffmpeg
 //   gameplay-touch.json  finger position per clip frame (for the touch indicator overlay)
@@ -27,6 +28,8 @@ const PORT = 4179;
 const BASE = `http://localhost:${PORT}/`;
 const FPS = 30;
 const STEP = 1000 / FPS;
+/** Touch drags move the piece faster than the finger (TOUCH_GAIN in src/input.ts). */
+const TOUCH_GAIN = { x: 1.25, y: 1.5 };
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true };
 
 /** Virtual clock: time only moves when `__step(ms)` is called. */
@@ -105,16 +108,19 @@ async function stageClip(page, { score, best }) {
 
 /** Canvas-relative geometry of a move: where the piece sits in the tray and where the finger must go. */
 async function moveGeometry(page, slot, r, c) {
-  return page.evaluate(({ slot, r, c }) => {
+  return page.evaluate(({ slot, r, c, gain }) => {
     const { layout, game } = window.blockBaster;
     const piece = game.tray[slot];
     const w = piece.shape.cols * layout.cell;
     const h = piece.shape.rows * layout.cell;
     const left = layout.boardX + c * layout.cell;
     const top = layout.boardY + r * layout.cell;
-    // Touch drags hold the piece 1.1 cells above the finger (see app.ts).
-    return { from: { x: layout.slots[slot].cx, y: layout.slots[slot].cy }, to: { x: left + w / 2, y: top + h + layout.cell * 1.1 } };
-  }, { slot, r, c });
+    const from = { x: layout.slots[slot].cx, y: layout.slots[slot].cy };
+    // A touch picks the piece up centred 1.1 cells above the finger, then moves it by the
+    // finger's travel times the gain (see app.ts), so the finger travels less than the piece.
+    const start = { x: from.x - w / 2, y: from.y - h - layout.cell * 1.1 };
+    return { from, to: { x: from.x + (left - start.x) / gain.x, y: from.y + (top - start.y) / gain.y } };
+  }, { slot, r, c, gain: TOUCH_GAIN });
 }
 
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -176,7 +182,8 @@ async function recordClip(page) {
   await drag(1, 5, 6);
   await hold(34);
   await drag(2, 4, 3);
-  await hold(54, { 14: 'board-clear' });
+  // Long enough to see the board clear switch the style (shimmer, then the new variant's name).
+  await hold(78, { 14: 'board-clear' });
 
   writeFileSync(join(media, 'gameplay-touch.json'), JSON.stringify({ fps: FPS, width: 780, height: 1688, frames: touch }));
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(framesDir, 'f%04d.png'),
@@ -225,6 +232,42 @@ async function captureGameOver(context) {
   await page.close();
 }
 
+/** One screenshot per style level, all showing the same position. */
+async function captureStyles(context) {
+  const MIN_SCORES = [0, 50_000, 100_000, 200_000, 500_000, 1_000_000];
+  for (const [level, min] of MIN_SCORES.entries()) {
+    const page = await openGame(context);
+    await page.evaluate((score) => {
+      const app = window.blockBaster;
+      const rows = [
+        '..77.1..',
+        '3.77.122',
+        '33.441.2',
+        '6664.555',
+        '6.222.5.',
+        '442.35.7',
+        '4411.3..',
+        '5511.3..',
+      ];
+      rows.forEach((line, r) => [...line].forEach((ch, c) => (app.game.board[r * 8 + c] = ch === '.' ? 0 : Number(ch))));
+      app.debugSetTray(['I2-0', 'V3-1', 'O2-0']);
+      app.game.tray.forEach((p, i) => (p.color = [2, 5, 7][i]));
+      app.game.score = score;
+      app.best = score;
+      app.shownScore = score;
+      app.updateHud(true);
+      app.updateStyle(0);
+    }, min + 12_480);
+    // Let the level-up banner and fireworks play out, and the page background (a CSS
+    // transition on real time, not the virtual clock) fade to the new colours.
+    await step(page, 150);
+    await page.waitForTimeout(1500);
+    await step(page);
+    await page.screenshot({ path: join(media, `screen-style-${level}.png`) });
+    await page.close();
+  }
+}
+
 async function captureDesktop(browser) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1.5 });
   const page = await openGame(context);
@@ -244,6 +287,7 @@ try {
   await page.close();
   await captureMenu(phone);
   await captureGameOver(phone);
+  await captureStyles(phone);
   await phone.close();
   await captureDesktop(browser);
 } finally {

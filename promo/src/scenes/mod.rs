@@ -4,6 +4,7 @@ mod features;
 mod gameplay;
 mod intro;
 mod outro;
+mod styles;
 
 pub use anywhere::Anywhere;
 pub use best::Best;
@@ -11,6 +12,7 @@ pub use features::Features;
 pub use gameplay::{Gameplay, Touch};
 pub use intro::Intro;
 pub use outro::Outro;
+pub use styles::Styles;
 
 use crate::draw::*;
 use fframes::{Svgr, svgr};

@@ -35,7 +35,7 @@ impl Scene for Anywhere {
             .map(|(i, text)| {
                 let c = ease_out_back(prog(t, 1.2 + i as f32 * 0.18, 0.45));
                 let fill = if i == 0 { "url(#gold-gradient)" } else { "#ffffff" };
-                let color = if i == 0 { "#3b2600" } else { "#2f43ab" };
+                let color = if i == 0 { "#3b2600" } else { "#137a80" };
                 pill(1712., 420. + i as f32 * 92., 300., text, fill, color, c, clamp01(c * 2.))
             })
             .collect();

@@ -13,13 +13,29 @@ import wave
 import numpy as np
 
 SR = 44100
-LENGTH = 33.0
 BEAT = 0.5  # 120 BPM
 rng = np.random.default_rng(7)
 
-# Scene starts in the video (seconds), see promo/src/scenes: every scene after the intro
-# overlaps the previous one by 0.4 s.
-INTRO, GAMEPLAY, FEATURES, BEST, ANYWHERE, OUTRO = 0.0, 4.0, 12.1133, 18.3133, 22.7133, 27.3133
+# Scene lengths in seconds, as in promo/src/scenes (DURATION of each scene). Every scene after the
+# intro overlaps the previous one by CROSSFADE.
+CROSSFADE = 0.4
+CLIP_FRAMES = 268  # length of media/gameplay.mp4
+SCENES = [
+    ("intro", 4.4),
+    ("gameplay", 0.45 + CLIP_FRAMES / 30),
+    ("styles", 5.8),
+    ("features", 6.6),
+    ("best", 4.8),
+    ("anywhere", 5.0),
+    ("outro", 5.6),
+]
+STARTS = {}
+_t = 0.0
+for _name, _dur in SCENES:
+    STARTS[_name] = _t
+    _t += _dur - CROSSFADE
+LENGTH = round(_t + CROSSFADE + 0.1, 1)
+INTRO, GAMEPLAY, STYLES, FEATURES, BEST, ANYWHERE, OUTRO = (STARTS[n] for n, _ in SCENES)
 CLIP = GAMEPLAY + 0.45  # the gameplay recording starts playing here
 DROP = GAMEPLAY  # the beat kicks in with the gameplay
 
@@ -232,6 +248,19 @@ def effects():
     pickup(f(21)); place(f(48)); clear(f(48), 1, 1)
     pickup(f(84)); place(f(111)); clear(f(111), 2, 2)
     pickup(f(157)); place(f(184)); clear(f(184), 2, 3); board_clear(f(184))
+    # The board clear switches the style half a second later (src/app.ts), with a sparkly sweep.
+    for i, step in enumerate([0, 4, 7, 12, 16, 19, 24]):
+        tone(f(199) + 0.7 + i * 0.035, 784 * 2 ** (step / 12), 0.3, "sine", 0.06)
+    # Styles: each phone lands with a thud and a bell, climbing up the scale; then a fanfare for the top level.
+    whoosh(STYLES + 0.2)
+    for i, m in enumerate([72, 74, 76, 79, 81, 84]):
+        land = STYLES + 0.5 + i * 0.32 + 0.12
+        place(land, 0.45)
+        tone(land, hz(m), 0.5, "sine", 0.1)
+        tone(land, hz(m + 24), 0.3, "sine", 0.03)
+    crown = STYLES + 0.5 + 5 * 0.32 + 0.45
+    clear(crown, 4, 3)
+    board_clear(crown - 0.25)
     # Features: one pluck per card.
     whoosh(FEATURES + 0.2)
     for i, m in enumerate([72, 74, 76, 79, 81, 84]):

@@ -47,7 +47,8 @@ export class BlockBasterApp {
   private locked = false;
   private frame = 0;
   private gameOverTimer = 0;
-  private styleTimer = 0;
+  /** A style earned by the last move, applied on the first frame at or after `at`. */
+  private pendingStyle: { style: Style; at: number } | null = null;
   private bestAtStart = 0;
 
   constructor(
@@ -123,9 +124,13 @@ export class BlockBasterApp {
     const s = this.scene;
     s.now = now;
     s.drag = this.dragView(now);
+    if (this.pendingStyle && now >= this.pendingStyle.at) {
+      this.switchStyle(this.pendingStyle.style, now);
+      this.pendingStyle = null;
+    }
     this.renderer.render(s);
     this.updateHud();
-    if (this.renderer.isAnimating(s) || this.drag || this.shownScore !== this.game.score) this.invalidate();
+    if (this.renderer.isAnimating(s) || this.drag || this.pendingStyle || this.shownScore !== this.game.score) this.invalidate();
   }
 
   private resize(): void {
@@ -207,32 +212,35 @@ export class BlockBasterApp {
     this.invalidate();
   }
 
-  /** Switches to the style earned by the current game, after the line-clear animation. */
+  /**
+   * Schedules the style earned by the current game to appear after the line-clear animation.
+   * It runs on the animation clock rather than a timer, so it lands on the same frame every time.
+   */
   private updateStyle(delay: number): void {
     const style = styleFor(this.game.score, this.game.boardClears);
-    clearTimeout(this.styleTimer);
-    if (style.key === this.scene.style.key) return;
-    this.styleTimer = window.setTimeout(() => {
-      const prev = this.scene.style;
-      const now = performance.now();
-      const s = this.scene;
-      const { cell, boardY, boardSize, width } = this.layout;
-      const mid = boardY + boardSize / 2;
-      this.applyStyle(style);
-      s.styleWaveAt = now;
-      if (style.tier.level > prev.tier.level) {
-        const at = now + 700;
-        s.texts.push({ text: 'New style!', x: width / 2, y: mid - cell * 0.75, size: cell * 0.6, color: style.palette.glow, start: at, duration: 2200, banner: true });
-        s.texts.push({ text: style.tier.name, x: width / 2, y: mid + cell * 0.35, size: cell * 1.25, color: style.palette.accent, start: at + 120, duration: 2100, banner: true });
-        this.sound.tierUp(style.tier.level);
-        if (this.settings.haptics) vibrate('heavy');
-        this.fireworks(Math.max(3, style.tier.fx.fireworks), now + 600);
-      } else {
-        s.texts.push({ text: style.palette.name, x: width / 2, y: mid + cell * 2.1, size: cell * 0.6, color: style.palette.glow, start: now + 500, duration: 1500, banner: true });
-        this.sound.styleShift();
-      }
-      this.invalidate();
-    }, delay);
+    this.pendingStyle = style.key === this.scene.style.key ? null : { style, at: performance.now() + delay };
+    this.invalidate();
+  }
+
+  /** Applies a newly earned style with its reveal: a shimmer, a banner, sounds and, for a new tier, fireworks. */
+  private switchStyle(style: Style, now: number): void {
+    const prev = this.scene.style;
+    const s = this.scene;
+    const { cell, boardY, boardSize, width } = this.layout;
+    const mid = boardY + boardSize / 2;
+    this.applyStyle(style);
+    s.styleWaveAt = now;
+    if (style.tier.level > prev.tier.level) {
+      const at = now + 700;
+      s.texts.push({ text: 'New style!', x: width / 2, y: mid - cell * 0.75, size: cell * 0.6, color: style.palette.glow, start: at, duration: 2200, banner: true });
+      s.texts.push({ text: style.tier.name, x: width / 2, y: mid + cell * 0.35, size: cell * 1.25, color: style.palette.accent, start: at + 120, duration: 2100, banner: true });
+      this.sound.tierUp(style.tier.level);
+      if (this.settings.haptics) vibrate('heavy');
+      this.fireworks(Math.max(3, style.tier.fx.fireworks), now + 600);
+    } else {
+      s.texts.push({ text: style.palette.name, x: width / 2, y: mid + cell * 2.1, size: cell * 0.6, color: style.palette.glow, start: now + 500, duration: 1500, banner: true });
+      this.sound.styleShift();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -486,7 +494,7 @@ export class BlockBasterApp {
 
   newGame(seed?: number): void {
     clearTimeout(this.gameOverTimer);
-    clearTimeout(this.styleTimer);
+    this.pendingStyle = null;
     this.game = new Game(seed);
     this.bestAtStart = this.best;
     storage.saveBestAtStart(this.best);
