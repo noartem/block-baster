@@ -141,7 +141,7 @@ jobs:
         working-directory: promo
         run: cargo run --release -- render
       - name: Extract poster frame
-        run: ffmpeg -y -loglevel error -ss 15.5 -i promo/block-baster-promo.mp4 -frames:v 1 -q:v 3 promo/promo-poster.jpg
+        run: ffmpeg -y -loglevel error -ss 17.5 -i promo/block-baster-promo.mp4 -frames:v 1 -q:v 3 promo/promo-poster.jpg
       - uses: actions/upload-artifact@v5
         with:
           name: promo-video
