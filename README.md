@@ -28,6 +28,7 @@ Clear several lines at once, or keep clearing turn after turn, to build **combos
 The game ends when nothing fits.
 
 - 🎯 **Fair**: every new set of pieces can always be placed somehow
+- 🍀 **Lucky sets**: some sets glow in the tray; they are picked to clear lines and free up room. At first every set is lucky, then every 2nd from 2k points, every 3rd from 10k and every 4th from 50k, and the next set is always lucky once the board is half full
 - 💥 Juicy effects, synthesized sounds and haptics
 - 🎵 Music that plays along: calm lofi at the start, building up to EDM as your score grows and you play faster
 - ✨ Six style levels unlocked at 10k, 50k, 100k, 200k and 500k points, each with new blocks, effects, fonts and sounds; clearing the whole board switches the colours

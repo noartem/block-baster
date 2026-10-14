@@ -5,11 +5,39 @@ import { SHAPES, type Shape } from './shapes';
 export const TRAY_SIZE = 3;
 
 /** Score at which the piece mix reaches its hardest distribution. */
-const HARDEST_AT = 6000;
-/** Until this score the dealer helps the player get going, fading out on the way. */
-export const OPENING_UNTIL = 2000;
-const CANDIDATE_ATTEMPTS = 30;
+const HARDEST_AT = 30_000;
+const CANDIDATE_ATTEMPTS = 40;
+/** Solvable trays a lucky deal chooses the best one from. */
+const LUCKY_CANDIDATES = 12;
 const SOLVER_BUDGET = 25_000;
+
+/**
+ * How often the dealer gives a hand. Below `until` points every `every`-th
+ * tray is a lucky one: picked out of several random trays for the most lines
+ * it clears and the most room it leaves. The rest are plain random trays.
+ */
+export const LUCK_LEVELS = [
+  { until: 2_000, every: 1 },
+  { until: 10_000, every: 2 },
+  { until: 50_000, every: 3 },
+  { until: Infinity, every: 4 },
+] as const;
+
+/** When the board is at least this full, the next tray is always a lucky one. */
+export const RESCUE_FILL = 0.5;
+
+/** Every how many trays a lucky one comes at this score. */
+export function luckEvery(score: number): number {
+  return LUCK_LEVELS.find((l) => score < l.until)!.every;
+}
+
+/**
+ * Whether the next tray should be a lucky one, given the score, how full the
+ * board is (0..1) and how many plain trays were dealt since the last lucky one.
+ */
+export function isLuckyDeal(score: number, fill: number, sinceLucky: number): boolean {
+  return sinceLucky + 1 >= luckEvery(score) || fill >= RESCUE_FILL;
+}
 
 /** Weight of a shape given the current game situation. */
 export function shapeWeight(shape: Shape, score: number, fill: number): number {
@@ -49,15 +77,6 @@ export function isSolvable(masks: Masks, shapes: readonly Shape[], budget = SOLV
   return solve(masks, shapes);
 }
 
-/** Highest number of lines the shape can clear with a single placement. */
-export function bestClear(masks: Masks, shape: Shape): number {
-  let best = 0;
-  for (let r = 0; r + shape.rows <= SIZE; r++)
-    for (let c = 0; c + shape.cols <= SIZE; c++)
-      if (fitsMask(masks, shape, r, c)) best = Math.max(best, placeMask(masks, shape, r, c).lines);
-  return best;
-}
-
 const WALLS = 0b10_0000_0001;
 const popcount = (x: number) => {
   let n = 0;
@@ -79,15 +98,17 @@ function contact(masks: Masks, shape: Shape, r: number, c: number): number {
 }
 
 /**
- * Lines the tray can clear when its pieces are placed one after another, in
- * the best order, each at the spot that clears most (or fits snuggest). This
- * catches pieces that only clear together, like two I4s on an empty row.
+ * Plays the tray out: its pieces placed one after another, in the best order,
+ * each at the spot that clears most (or fits snuggest). Returns the lines
+ * cleared and the cells left filled. This catches pieces that only clear
+ * together, like two I4s on an empty row.
  */
-export function trayClears(masks: Masks, tray: readonly Shape[]): number {
-  let best = 0;
+export function playOut(masks: Masks, tray: readonly Shape[]): { lines: number; filled: number } {
+  let best = { lines: 0, filled: Infinity };
   const run = (m: Masks, rest: readonly Shape[], lines: number) => {
     if (rest.length === 0) {
-      best = Math.max(best, lines);
+      const filled = m.reduce((n, row) => n + popcount(row), 0);
+      if (lines > best.lines || (lines === best.lines && filled < best.filled)) best = { lines, filled };
       return;
     }
     for (let i = 0; i < rest.length; i++) {
@@ -107,6 +128,9 @@ export function trayClears(masks: Masks, tray: readonly Shape[]): number {
   run(masks, tray, 0);
   return best;
 }
+
+/** Lines the tray clears when played out (see {@link playOut}). */
+export const trayClears = (masks: Masks, tray: readonly Shape[]) => playOut(masks, tray).lines;
 
 function randomTray(rng: Rng, weight: (s: Shape) => number): Shape[] {
   const tray: Shape[] = [];
@@ -151,31 +175,29 @@ function constructiveTray(masks: Masks, rng: Rng, weight: (s: Shape) => number):
  * Deals a new tray of pieces. The tray is guaranteed to be placeable (in some
  * order) whenever that is possible at all, mirroring how Block Blast feels:
  * you only lose through your own placement choices.
+ *
+ * A lucky tray (see {@link isLuckyDeal}) is the best of several random ones:
+ * most lines cleared when played out, then the emptiest board left behind.
  */
-export function generateTray(board: Board, rng: Rng, score: number): Shape[] {
+export function generateTray(board: Board, rng: Rng, score: number, lucky = false): Shape[] {
   const masks = toMasks(board);
   const fill = filledCount(board) / (SIZE * SIZE);
   const weight = (s: Shape) => shapeWeight(s, score, fill);
-  // Like the original, the opening is generous: early trays are picked from
-  // more candidates, for pieces that clear lines together. Later on the dealer
-  // only sometimes prefers a tray that lets the player clear lines right away.
-  const opening = 1 - Math.min(1, score / OPENING_UNTIL);
-  const assist = rng.next() < 0.45 - 0.25 * Math.min(1, score / HARDEST_AT) + opening;
-  const candidates = 4 + Math.round(8 * opening);
 
   let chosen: Shape[] | null = null;
-  let chosenValue = -1;
+  let chosenValue = -Infinity;
   let found = 0;
-  for (let attempt = 0; attempt < CANDIDATE_ATTEMPTS * (1 + opening); attempt++) {
+  for (let attempt = 0; attempt < CANDIDATE_ATTEMPTS; attempt++) {
     const tray = randomTray(rng, weight);
     if (!isSolvable(masks, tray)) continue;
-    if (!assist) return tray;
-    const value = tray.reduce((sum, s) => sum + bestClear(masks, s), 0) + (opening > 0 ? 2 * trayClears(masks, tray) : 0);
-    if (value > chosenValue) {
+    if (!lucky) return tray;
+    const { lines, filled } = playOut(masks, tray);
+    const value = lines * SIZE * SIZE - filled;
+    if (!chosen || value > chosenValue) {
       chosen = tray;
       chosenValue = value;
     }
-    if (++found >= candidates) break;
+    if (++found >= LUCKY_CANDIDATES) break;
   }
   return chosen ?? constructiveTray(masks, rng, weight);
 }
