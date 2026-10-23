@@ -28,21 +28,21 @@ interface Family {
 }
 
 const FAMILIES: Family[] = [
-  { family: 'dot', pattern: ['#'], weight: 2, tier: 0, rotate: false },
-  { family: 'I2', pattern: ['##'], weight: 5, tier: 0, rotate: true },
+  { family: 'dot', pattern: ['#'], weight: 3, tier: 0, rotate: false },
+  { family: 'I2', pattern: ['##'], weight: 6, tier: 0, rotate: true },
   { family: 'I3', pattern: ['###'], weight: 8, tier: 0, rotate: true },
   { family: 'I4', pattern: ['####'], weight: 8, tier: 1, rotate: true },
-  { family: 'I5', pattern: ['#####'], weight: 6, tier: 2, rotate: true },
+  { family: 'I5', pattern: ['#####'], weight: 4, tier: 2, rotate: true },
   { family: 'O2', pattern: ['##', '##'], weight: 8, tier: 0, rotate: false },
-  { family: 'O3', pattern: ['###', '###', '###'], weight: 4, tier: 2, rotate: false },
-  { family: 'R23', pattern: ['###', '###'], weight: 6, tier: 1, rotate: true },
+  { family: 'O3', pattern: ['###', '###', '###'], weight: 3, tier: 2, rotate: false },
+  { family: 'R23', pattern: ['###', '###'], weight: 5, tier: 1, rotate: true },
   { family: 'V3', pattern: ['#.', '##'], weight: 8, tier: 0, rotate: true },
   { family: 'L4', pattern: ['#.', '#.', '##'], weight: 7, tier: 1, rotate: true },
   { family: 'J4', pattern: ['.#', '.#', '##'], weight: 7, tier: 1, rotate: true },
   { family: 'T4', pattern: ['###', '.#.'], weight: 7, tier: 1, rotate: true },
   { family: 'S4', pattern: ['.##', '##.'], weight: 5, tier: 1, rotate: true },
   { family: 'Z4', pattern: ['##.', '.##'], weight: 5, tier: 1, rotate: true },
-  { family: 'V5', pattern: ['#..', '#..', '###'], weight: 6, tier: 2, rotate: true },
+  { family: 'V5', pattern: ['#..', '#..', '###'], weight: 4, tier: 2, rotate: true },
 ];
 
 function parse(pattern: string[]): Cell[] {
