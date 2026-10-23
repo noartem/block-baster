@@ -124,8 +124,9 @@ body {
 }
 
 /* Wide display fonts need a little less size to fit seven digits. */
-body[data-tier='3'] .score,
-body[data-tier='5'] .score {
+body[data-tier='6'] .score,
+body[data-tier='7'] .score,
+body[data-tier='9'] .score {
   font-size: clamp(32px, 8.5vw, 50px);
   padding: 8px 0 4px;
 }
@@ -409,21 +410,22 @@ body::after {
   z-index: 0;
 }
 
-body[data-tier='2'] .score,
-body[data-tier='4'] .score {
+body[data-tier='5'] .score,
+body[data-tier='6'] .score,
+body[data-tier='8'] .score {
   text-shadow:
     0 3px 0 rgba(0, 0, 0, 0.28),
     0 0 18px var(--glow);
 }
 
-body[data-tier='3'] .score {
+body[data-tier='7'] .score {
   text-shadow:
     0 0 6px var(--glow),
     0 0 18px var(--glow),
     0 0 36px var(--glow2);
 }
 
-body[data-tier='5'] .score {
+body[data-tier='9'] .score {
   color: transparent;
   background: linear-gradient(180deg, #fffbe6 0%, var(--accent) 48%, var(--accent) 55%, #b07a10 100%);
   -webkit-background-clip: text;
@@ -432,22 +434,22 @@ body[data-tier='5'] .score {
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 10px var(--glow));
 }
 
-body[data-tier='3'] .card,
-body[data-tier='4'] .card,
-body[data-tier='5'] .card {
+body[data-tier='7'] .card,
+body[data-tier='8'] .card,
+body[data-tier='9'] .card {
   box-shadow:
     0 0 22px var(--card-edge),
     0 16px 40px rgba(0, 0, 0, 0.5);
 }
 
-body[data-tier='5'] .tier-track i {
+body[data-tier='9'] .tier-track i {
   background: linear-gradient(90deg, #b07a10, #fff6c8, var(--accent), #fff6c8, #b07a10);
   background-size: 200% 100%;
   animation: shimmer 2.4s linear infinite;
 }
 
 /* Candy: bubbles drifting up. */
-body[data-tier='1']::before {
+body[data-tier='2']::before {
   inset: 0 0 -320px;
   background-image:
     radial-gradient(circle at 12% 20%, rgba(255, 255, 255, 0.22) 0 10px, transparent 11px),
@@ -459,9 +461,59 @@ body[data-tier='1']::before {
   animation: rise 26s linear infinite;
 }
 
+/* Cardboard: the corrugated flutes of a big box. */
+body[data-tier='1']::before {
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.06) 0 5px, transparent 5px 9px, rgba(255, 255, 255, 0.04) 9px 11px, transparent 11px 16px);
+}
+
+/* Gingerbread: snow falling past the window. */
+body[data-tier='3']::before {
+  inset: -320px 0 0;
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(255, 255, 255, 0.55) 0 2.5px, transparent 3.5px),
+    radial-gradient(circle at 62% 35%, rgba(255, 255, 255, 0.4) 0 1.8px, transparent 2.8px),
+    radial-gradient(circle at 38% 62%, rgba(255, 255, 255, 0.5) 0 3px, transparent 4px),
+    radial-gradient(circle at 85% 80%, rgba(255, 255, 255, 0.35) 0 2px, transparent 3px),
+    radial-gradient(circle at 8% 88%, rgba(255, 255, 255, 0.3) 0 1.5px, transparent 2.5px);
+  background-size: 260px 320px;
+  animation: fall 22s linear infinite;
+}
+
+/* Wooden: long streaks of grain across wall panelling. */
+body[data-tier='4']::before {
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(178deg, rgba(60, 25, 0, 0.1) 0 2px, transparent 2px 13px, rgba(255, 230, 190, 0.05) 13px 15px, transparent 15px 31px),
+    repeating-linear-gradient(90deg, transparent 0 calc(25vw - 2px), rgba(0, 0, 0, 0.18) calc(25vw - 2px) 25vw);
+}
+
+/* Iron: embers rising from the forge. */
+body[data-tier='6']::before {
+  inset: 0 0 -320px;
+  background-image:
+    radial-gradient(circle at 20% 30%, var(--glow) 0 1.5px, transparent 2.5px),
+    radial-gradient(circle at 70% 60%, var(--glow2) 0 1px, transparent 2px),
+    radial-gradient(circle at 45% 90%, var(--glow) 0 1.2px, transparent 2.2px),
+    radial-gradient(circle at 90% 15%, var(--accent) 0 1px, transparent 2px);
+  background-size: 240px 320px;
+  opacity: 0.7;
+  animation: rise 12s linear infinite;
+}
+
+body[data-tier='6']::after {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40%;
+  background: radial-gradient(ellipse 70% 60% at 50% 100%, var(--glow) 0%, transparent 70%);
+  opacity: 0.18;
+}
+
 /* Gems: twinkling glints. */
-body[data-tier='2']::before,
-body[data-tier='2']::after {
+body[data-tier='5']::before,
+body[data-tier='5']::after {
   inset: 0;
   background-image:
     radial-gradient(circle, var(--glow2) 0 1.5px, transparent 2.5px),
@@ -475,7 +527,7 @@ body[data-tier='2']::after {
   animation: twinkle 3.2s ease-in-out infinite alternate;
 }
 
-body[data-tier='2']::after {
+body[data-tier='5']::after {
   background-size:
     200px 150px,
     120px 130px;
@@ -486,7 +538,7 @@ body[data-tier='2']::after {
 }
 
 /* Neon: a synthwave grid rolling towards you under a glowing horizon. */
-body[data-tier='3']::before {
+body[data-tier='7']::before {
   left: -50%;
   right: -50%;
   bottom: -60px;
@@ -503,7 +555,7 @@ body[data-tier='3']::before {
   animation: grid 1.8s linear infinite;
 }
 
-body[data-tier='3']::after {
+body[data-tier='7']::after {
   left: 0;
   right: 0;
   bottom: 28%;
@@ -513,7 +565,7 @@ body[data-tier='3']::after {
 }
 
 /* Aurora: slow drifting curtains of light over faint stars. */
-body[data-tier='4']::before {
+body[data-tier='8']::before {
   inset: -20%;
   background:
     radial-gradient(40% 25% at 30% 25%, var(--glow) 0%, transparent 70%),
@@ -524,7 +576,7 @@ body[data-tier='4']::before {
   animation: aurora 14s ease-in-out infinite alternate;
 }
 
-body[data-tier='4']::after {
+body[data-tier='8']::after {
   inset: 0;
   background-image:
     radial-gradient(circle, #ffffff 0 1px, transparent 1.6px),
@@ -539,7 +591,7 @@ body[data-tier='4']::after {
 }
 
 /* Legendary: turning rays of light and a twinkling golden starfield. */
-body[data-tier='5']::before {
+body[data-tier='9']::before {
   left: 50%;
   top: 38%;
   width: 240vmax;
@@ -552,7 +604,7 @@ body[data-tier='5']::before {
   animation: spin 80s linear infinite;
 }
 
-body[data-tier='5']::after {
+body[data-tier='9']::after {
   inset: 0;
   background-image:
     radial-gradient(circle, var(--glow2) 0 1.5px, transparent 2.5px),
@@ -572,6 +624,12 @@ body[data-tier='5']::after {
 @keyframes rise {
   to {
     transform: translateY(-320px);
+  }
+}
+
+@keyframes fall {
+  to {
+    transform: translateY(320px);
   }
 }
 

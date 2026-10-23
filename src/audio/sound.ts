@@ -194,13 +194,13 @@ export class Sound {
     if (!ctx) return;
     const t = ctx.currentTime + 0.2;
     const root = 261.63;
-    // I - IV - V - I, adding voices and length as the tiers rise.
+    // I - IV - V - I, adding voices and length as the tiers rise (Neon is level 7, Aurora 8, Legendary 9).
     const chords = [
       [0, 4, 7],
       [5, 9, 12],
       [7, 11, 14],
       [12, 16, 19, 24],
-    ].slice(level >= 3 ? 0 : 2);
+    ].slice(level >= 7 ? 0 : 2);
     const beat = 0.16;
     chords.forEach((chord, i) => {
       const last = i === chords.length - 1;
@@ -208,10 +208,10 @@ export class Sound {
         const f = root * Math.pow(2, step / 12);
         this.tone(f, t + i * beat, last ? 1.2 : 0.3, { type: this.profile.lead, vol: this.leadVol() * 0.9, echo: 0.3 });
         this.tone(f * 2, t + i * beat, last ? 0.9 : 0.25, { type: 'sine', vol: 0.05, echo: 0.3 });
-        if (level >= 4) this.tone(f / 2, t + i * beat, last ? 1.4 : 0.35, { type: 'triangle', vol: 0.08, attack: 0.04 });
+        if (level >= 8) this.tone(f / 2, t + i * beat, last ? 1.4 : 0.35, { type: 'triangle', vol: 0.08, attack: 0.04 });
       }
     });
-    if (level >= 5) {
+    if (level >= 9) {
       // Shimmering cascade on top for the final tier.
       for (let i = 0; i < 8; i++) {
         this.tone(1046.5 * Math.pow(2, [0, 4, 7, 12][i % 4] / 12 + Math.floor(i / 4)), t + chords.length * beat + i * 0.05, 0.4, { type: 'sine', vol: 0.03, echo: 0.5 });
