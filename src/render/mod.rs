@@ -1,3 +1,4 @@
-//! STUB: replaced by the tiny-skia port of the sprites and frames.
 pub mod board;
+pub mod frames;
+pub mod skia;
 pub mod sprites;
