@@ -11,3 +11,5 @@ playwright-report/
 /screenshots/
 /target/
 /dist/
+/.claude/worktrees/
+/node_modules/

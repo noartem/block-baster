@@ -168,7 +168,6 @@ impl<H: Host> Shell<H> {
         self.app.frame(canvas, now);
         canvas.flush();
         self.frames += 1;
-        if std::env::var_os("BB_DEBUG").is_some() { eprintln!("frame {} needs={} {}", self.frames, self.app.needs_frame(), self.app.debug_stats()); }
         if let Some(path) = self.host.capture()
             && self.frames > 5
             && !self.app.needs_frame()

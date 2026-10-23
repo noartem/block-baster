@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/** Browser tests of the web (WebAssembly) build, served from dist/. */
 export default defineConfig({
   testDir: 'tests/e2e',
   fullyParallel: true,
@@ -15,9 +16,10 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'npm run build && npm run preview',
+    // CI builds dist/ in an earlier step and sets SKIP_BUILD.
+    command: process.env.SKIP_BUILD ? 'npm run serve' : 'npm run build:web && npm run serve',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 600_000,
   },
 });

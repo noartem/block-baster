@@ -285,10 +285,14 @@ impl Ui {
         let cx = ctx.width / 2.0;
         let fonts = ctx.fonts.display(tier.font);
         let score_text = hud.score.to_string();
+        let fill = text::paint(&fonts, size, Align::Center, Color::white());
+        // Long scores shrink to stay clear of the best score and the menu button.
+        let best_w = 32.0 + text::width(c, &hud.best.to_string(), &best);
+        let room = (right - left) - 2.0 * best_w.max(44.0) - 16.0;
+        let fit = (room / text::width(c, &score_text, &fill).max(1.0)).min(1.0);
         c.save();
         c.translate(cx, row_mid);
-        c.scale(hud.bump, hud.bump);
-        let fill = text::paint(&fonts, size, Align::Center, Color::white());
+        c.scale(hud.bump * fit, hud.bump * fit);
         match tier.level {
             7 => {
                 // Neon tubes: layered glows.

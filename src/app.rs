@@ -1120,8 +1120,8 @@ impl App {
             "streaks": self.scene.streaks.len(),
             "texts": self.scene.texts.len(),
             "animating": self.is_animating(),
-            "why": [Renderer::is_animating(&self.scene), self.drag.is_some(), self.pending_style.is_some(), self.shown_score != self.game.score, self.bump.is_some(), (self.tier_bar - self.tier_progress()).abs() > 0.002, self.now - self.bg_at < BG_FADE_MS, self.ui.is_animating(self.now)],
             "now": self.now,
+            "wasmMemory": wasm_memory(),
         })
     }
 
@@ -1262,6 +1262,18 @@ impl App {
 
     pub fn store(&mut self) -> &mut dyn KeyValue {
         self.store.as_mut()
+    }
+}
+
+/// Size of the WebAssembly memory in bytes (0 natively), for leak tests.
+fn wasm_memory() -> usize {
+    #[cfg(target_arch = "wasm32")]
+    {
+        core::arch::wasm32::memory_size(0) * 65536
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        0
     }
 }
 

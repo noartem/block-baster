@@ -7,9 +7,9 @@ export default defineConfig({
   reporter: 'list',
   use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:4173' },
   webServer: {
-    command: 'npm run build && npm run preview',
+    command: process.env.SKIP_BUILD ? 'npm run serve' : 'npm run build:web && npm run serve',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 600_000,
   },
 });

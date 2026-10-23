@@ -1,11 +1,11 @@
 import { type CDPSession, type Page, expect, test } from '@playwright/test';
-import { TOUCH_GAIN } from '../../src/input';
+import { TOUCH_GAIN, waitReady } from './helpers';
 
 /**
  * Plays many moves with real touch drags and checks that memory reaches a
- * steady state: after garbage collection the JS heap, DOM nodes (including
- * detached canvases such as block sprites) and event listeners must not keep
- * growing, and the game's own caches and effect lists must stay bounded.
+ * steady state: the WebAssembly memory, the JS heap, DOM nodes and event
+ * listeners must not keep growing, and the game's own caches and effect lists
+ * must stay bounded.
  */
 
 type Move = { slot: number; r: number; c: number };
@@ -13,15 +13,16 @@ type Move = { slot: number; r: number; c: number };
 /** Picks the move that clears the most lines (so effects get exercised), or null when nothing fits. */
 function pickMove(page: Page) {
   return page.evaluate((): Move | null => {
-    const { game } = window.blockBaster;
+    const bb = window.blockBaster;
+    const { board, tray } = bb.state();
     let best: (Move & { lines: number }) | null = null;
-    game.tray.forEach((piece, slot) => {
+    tray.forEach((piece, slot) => {
       if (!piece) return;
       for (let r = 0; r < 8; r++)
         for (let c = 0; c < 8; c++) {
-          if (!game.canPlace(slot, r, c)) continue;
-          const b = game.board.slice();
-          for (const [dr, dc] of piece.shape.cells) b[(r + dr) * 8 + c + dc] = 1;
+          if (!bb.canPlace(slot, r, c)) continue;
+          const b = board.slice();
+          for (const [dr, dc] of piece.cells) b[(r + dr) * 8 + c + dc] = 1;
           let lines = 0;
           for (let i = 0; i < 8; i++) {
             let row = true;
@@ -40,11 +41,10 @@ function pickMove(page: Page) {
 }
 
 async function touchDrag(page: Page, move: Move | null, slot: number) {
-  const box = (await page.locator('#game').boundingBox())!;
   const g = await page.evaluate(
     ({ slot, move }) => {
-      const { layout, game } = window.blockBaster;
-      const shape = game.tray[slot]!.shape;
+      const { layout, tray } = window.blockBaster.state();
+      const shape = tray[slot]!;
       const w = shape.cols * layout.cell;
       const h = shape.rows * layout.cell;
       const from = { x: layout.slots[slot].cx, y: layout.slots[slot].cy };
@@ -56,7 +56,7 @@ async function touchDrag(page: Page, move: Move | null, slot: number) {
   );
   const finger = { x: g.from.x + (g.to.x - g.start.x) / TOUCH_GAIN.x, y: g.from.y + (g.to.y - g.start.y) / TOUCH_GAIN.y };
   const fire = (type: string, x: number, y: number) =>
-    page.locator('#game').dispatchEvent(type, { pointerId: 3, pointerType: 'touch', isPrimary: true, clientX: box.x + x, clientY: box.y + y, bubbles: true });
+    page.locator('#game').dispatchEvent(type, { pointerId: 3, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true });
   await fire('pointerdown', g.from.x, g.from.y);
   // Let the pick-up animation render: the piece grows through many sizes.
   await page.waitForTimeout(140);
@@ -79,9 +79,9 @@ async function play(page: Page, moves: number) {
       await touchDrag(page, null, move.slot);
       await page.waitForTimeout(220);
     }
-    const before = await page.evaluate(() => window.blockBaster.game.moves);
+    const before = await page.evaluate(() => window.blockBaster.state().moves);
     await touchDrag(page, move, move.slot);
-    expect(await page.evaluate(() => window.blockBaster.game.moves)).toBe(before + 1);
+    expect(await page.evaluate(() => window.blockBaster.state().moves)).toBe(before + 1);
     await page.waitForTimeout(120);
   }
   await expect.poll(() => page.evaluate(() => window.blockBaster.debugStats().animating), { timeout: 5000 }).toBe(false);
@@ -100,13 +100,13 @@ async function snapshot(page: Page, cdp: CDPSession) {
 test('memory stays flat over a long game', async ({ page, browserName }) => {
   // Heap metrics come from the Chrome DevTools Protocol; touch drags are the phone's input path.
   test.skip(browserName !== 'chromium' || test.info().project.name !== 'mobile', 'Runs on the mobile Chromium project only');
-  test.setTimeout(150_000);
+  test.setTimeout(180_000);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable');
   await page.goto('/?seed=777&reset');
-  await page.waitForSelector('body[data-ready=true]');
+  await waitReady(page);
 
-  // Warm up: JIT, sprite cache for every colour, first effects and saves.
+  // Warm up: sprite cache for every colour, first effects and saves.
   await play(page, 20);
   const warm = await snapshot(page, cdp);
   await play(page, 60);
@@ -123,4 +123,6 @@ test('memory stays flat over a long game', async ({ page, browserName }) => {
   expect(after.listeners).toBe(warm.listeners);
   expect(after.nodes - warm.nodes).toBeLessThanOrEqual(20);
   expect(after.heap - warm.heap).toBeLessThan(1024 * 1024);
+  // WebAssembly memory only ever grows, so growth here would be a leak.
+  expect(after.wasmMemory - warm.wasmMemory).toBeLessThanOrEqual(2 * 1024 * 1024);
 });
