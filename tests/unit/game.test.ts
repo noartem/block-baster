@@ -80,7 +80,7 @@ describe('Game', () => {
   it('deals lucky trays on a steady beat that slows with the score', () => {
     const g = new Game(1);
     expect(g.lucky).toBe(true);
-    g.score = 20_000;
+    g.score = 100_000;
     const beat: boolean[] = [];
     for (let i = 0; i < 6; i++) {
       g.board = createBoard();
