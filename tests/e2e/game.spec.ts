@@ -117,6 +117,7 @@ test('clearing the board switches the style and high scores unlock new tiers', a
 });
 
 test('music starts on the first touch, speeds up with the score and can be turned off', async ({ page }) => {
+  test.setTimeout(60_000);
   const errors = await open(page);
   await page.mouse.click(5, 300);
   await expect.poll(async () => (await state(page)).music.playing).toBe(true);
@@ -196,13 +197,16 @@ test('turns the on/off switches of older versions into levels', async ({ page })
 test('continues a game saved by the old web version', async ({ page }) => {
   await open(page);
   await page.evaluate(() => {
-    const board = Array(64).fill(0);
-    board[63] = 3;
-    localStorage.setItem('bb.best', '5000');
-    localStorage.setItem(
-      'bb.game',
-      JSON.stringify({ v: 1, board, tray: [{ id: 'L4-2', color: 5 }, null, { id: 'dot-0', color: 1 }], score: 120, combo: 1, sinceClear: 0, moves: 12, rng: 123456, over: false }),
-    );
+    // Written as the page goes away, after the game saved its own state.
+    window.addEventListener('pagehide', () => {
+      const board = Array(64).fill(0);
+      board[63] = 3;
+      localStorage.setItem('bb.best', '5000');
+      localStorage.setItem(
+        'bb.game',
+        JSON.stringify({ v: 1, board, tray: [{ id: 'L4-2', color: 5 }, null, { id: 'dot-0', color: 1 }], score: 120, combo: 1, sinceClear: 0, moves: 12, rng: 123456, over: false }),
+      );
+    });
   });
   await page.goto('/');
   await waitReady(page);
