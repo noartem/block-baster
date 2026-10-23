@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#137a80" />
+    <meta name="description" content="Block Baster: a free, open-source, ad-free block puzzle game. Drag blocks onto the board and clear rows and columns." />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="preload" href="./block_baster_bg.wasm" as="fetch" type="application/wasm" crossorigin />
+    <title>Block Baster</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+        background: linear-gradient(180deg, #1fa2a0 0%, #137a80 50%, #0b4f5c 100%) fixed #137a80;
+        color: #fff;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+        outline: none;
+      }
+      /* Read by the game to keep the HUD clear of notches and system bars. */
+      #safe-area {
+        position: fixed;
+        visibility: hidden;
+        pointer-events: none;
+        padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+      }
+      #message {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+        font-size: 18px;
+        line-height: 1.4;
+      }
+      #message[hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" aria-label="Game board. Drag pieces from the tray onto the board."></canvas>
+    <div id="safe-area"></div>
+    <div id="message" hidden></div>
+    <noscript><div id="message">Block Baster needs JavaScript and WebAssembly to run.</div></noscript>
+    <script type="module">
+      import init, { bb_command } from './block_baster.js';
+
+      /** Calls into the game (see `command` in src/platform/web.rs). */
+      const call = (cmd) => {
+        const res = JSON.parse(bb_command(JSON.stringify(cmd)));
+        if ('error' in res) throw new Error(res.error);
+        return res.ok;
+      };
+      // Handy for debugging from the console and for end-to-end tests and tools.
+      window.blockBaster = {
+        call,
+        state: () => call({ cmd: 'state' }),
+        debugStats: () => call({ cmd: 'state' }).stats,
+        canPlace: (slot, r, c) => call({ cmd: 'canPlace', slot, r, c }),
+        commit: (slot, r, c) => call({ cmd: 'commit', slot, r, c }),
+        setTray: (ids, colors) => call({ cmd: 'setTray', ids, colors }),
+        setBoard: (board) => call({ cmd: 'setBoard', board: board.flat() }),
+        set: (values) => call({ cmd: 'set', ...values }),
+        settle: () => call({ cmd: 'settle' }),
+        updateStyle: (delay = 0) => call({ cmd: 'updateStyle', delay }),
+        newGame: (seed) => call({ cmd: 'newGame', seed }),
+        serialize: () => call({ cmd: 'serialize' }),
+        setSetting: (key, value) => call({ cmd: 'setSetting', key, value }),
+        openMenu: () => call({ cmd: 'openMenu' }),
+        closeMenu: () => call({ cmd: 'closeMenu' }),
+        invalidate: () => call({ cmd: 'invalidate' }),
+      };
+
+      init().catch((e) => {
+        console.error(e);
+        const message = document.getElementById('message');
+        message.textContent = 'Sorry, this browser cannot run Block Baster: it needs WebAssembly and WebGL 2.';
+        message.hidden = false;
+      });
+
+      if ('serviceWorker' in navigator && location.protocol === 'https:') {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      }
+    </script>
+  </body>
+</html>

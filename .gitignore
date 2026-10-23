@@ -10,3 +10,4 @@ playwright-report/
 .vscode/
 /screenshots/
 /target/
+/dist/
