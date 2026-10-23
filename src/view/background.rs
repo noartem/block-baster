@@ -7,7 +7,7 @@ use std::f32::consts::PI;
 use femtovg::{Paint, Path};
 
 use super::Canvas;
-use super::draw::{self, circle, fill_rect, linear, radial, rect};
+use super::draw::{self, fill_rect, linear, radial, rect};
 use crate::color::{Rgb, black, white};
 
 /// Colours the background is drawn in (they fade between styles).
@@ -292,5 +292,4 @@ fn neon_grid(c: &mut Canvas, w: f32, h: f32, glow: Rgb, secs: f32) {
     let mut paint = fade;
     paint.set_line_width(2.0);
     c.stroke_path(&lines, &paint);
-    let _ = circle;
 }
