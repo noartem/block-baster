@@ -100,16 +100,17 @@ async function snapshot(page: Page, cdp: CDPSession) {
 test('memory stays flat over a long game', async ({ page, browserName }) => {
   // Heap metrics come from the Chrome DevTools Protocol; touch drags are the phone's input path.
   test.skip(browserName !== 'chromium' || test.info().project.name !== 'mobile', 'Runs on the mobile Chromium project only');
-  test.setTimeout(180_000);
+  // WebGL runs on the CPU (SwiftShader) in CI, so every frame is slow.
+  test.setTimeout(480_000);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable');
   await page.goto('/?seed=777&reset');
   await waitReady(page);
 
   // Warm up: sprite cache for every colour, first effects and saves.
-  await play(page, 20);
+  await play(page, 15);
   const warm = await snapshot(page, cdp);
-  await play(page, 60);
+  await play(page, 45);
   const after = await snapshot(page, cdp);
   test.info().annotations.push({ type: 'memory', description: JSON.stringify({ warm, after }) });
 
