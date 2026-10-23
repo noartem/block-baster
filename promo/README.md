@@ -18,8 +18,8 @@ GitHub release. The rendered file is not kept in git.
 | Anywhere | The game in a desktop browser and on a phone, plus where to get it |
 | Outro | Logo, name and the call to action: `noartem.github.io/block-baster` |
 
-The soundtrack is the game's own adaptive music ([`src/audio/music.ts`](../src/audio/music.ts)),
-rendered offline from the built game. It follows the video the way it follows a game: lofi over the
+The soundtrack is the game's own adaptive music ([`src/audio/music.rs`](../src/audio/music.rs)),
+rendered offline by the game's `soundtrack` binary ([`src/bin/soundtrack.rs`](../src/bin/soundtrack.rs)). It follows the video the way it follows a game: lofi over the
 intro, livelier with the gameplay, house through the styles and features, and full EDM from the best
 score on. The game's sound effects play on top, exactly on the frames where the moves happen.
 
@@ -29,8 +29,8 @@ score on. The game's sound effects play on top, exactly on the frames where the 
 promo/
   capture/capture.mjs   Playwright: stages the game, captures the screenshots and the gameplay clip
   capture/fonts.py      converts the game's Baloo 2 web font to TTF for fframes
-  audio/soundtrack.mjs  Playwright: renders the game's adaptive music along an intensity curve
-  audio/music.py        builds media/music.wav (that music + the game's sound effects)
+  audio/music.py        builds media/music.wav: the game's adaptive music, rendered along an intensity
+                        curve by `cargo run --release --bin soundtrack`, + the game's sound effects
   media/                everything the video uses (screenshots, gameplay.mp4, fonts, music)
   src/main.rs           the fframes Video: background, shared defs, scene list, encoder settings
   src/draw.rs           easing, game-style bevelled blocks, logo, phone and browser mockups
@@ -51,7 +51,7 @@ npm run build
 node promo/capture/capture.mjs      # needs ffmpeg on PATH (encodes media/gameplay.mp4)
 pip install fonttools numpy
 python3 promo/capture/fonts.py
-python3 promo/audio/music.py
+python3 promo/audio/music.py        # renders the music with `cargo run --release --bin soundtrack`
 ```
 
 If the gameplay clip changes length, update `CLIP_LENGTH` in `src/scenes/gameplay.rs` and `CLIP_FRAMES`

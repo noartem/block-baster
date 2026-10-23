@@ -1,12 +1,12 @@
 """Builds the promo soundtrack into promo/media/music.wav.
 
-The music is the game's own adaptive soundtrack (src/audio/music.ts), rendered by
-promo/audio/soundtrack.mjs from the built game. It follows the video like it follows a game: calm
+The music is the game's own adaptive soundtrack (src/audio/music.rs), rendered offline by the
+game's `soundtrack` binary (src/bin/soundtrack.rs). It follows the video like it follows a game: calm
 lofi over the intro, livelier with the gameplay, house through the styles and features, and full
 EDM from the best score on. On top, the game's sound effects (pick up, place, line clear, board
 clear) are re-created and placed on the frames where they happen in the video.
 
-Usage (from the repository root): npm run build && python3 promo/audio/music.py   (needs numpy)
+Usage (from the repository root): python3 promo/audio/music.py   (needs numpy and cargo)
 """
 
 from pathlib import Path
@@ -180,7 +180,7 @@ def soundtrack():
     with tempfile.TemporaryDirectory() as tmp:
         wav = Path(tmp) / "soundtrack.wav"
         subprocess.run(
-            ["node", "promo/audio/soundtrack.mjs", str(wav), str(LENGTH), json.dumps(INTENSITY)],
+            ["cargo", "run", "--release", "--quiet", "--bin", "soundtrack", "--", str(wav), str(LENGTH), json.dumps(INTENSITY)],
             cwd=root,
             check=True,
         )
