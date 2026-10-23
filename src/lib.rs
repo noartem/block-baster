@@ -6,4 +6,5 @@ pub mod game;
 pub mod input;
 pub mod layout;
 pub mod platform;
+pub mod render;
 pub mod styles;

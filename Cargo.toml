@@ -30,6 +30,7 @@ winit = { version = "0.30", default-features = false, features = ["rwh_06", "x11
 glutin = { version = "0.32", default-features = false, features = ["egl", "glx", "x11", "wayland", "wgl"] }
 glutin-winit = { version = "0.5", default-features = false, features = ["egl", "glx", "x11", "wayland", "wgl"] }
 # PNG output for the asset generator and screenshot tools.
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
 png = "0.18"
 
 [target.'cfg(target_os = "android")'.dependencies]
