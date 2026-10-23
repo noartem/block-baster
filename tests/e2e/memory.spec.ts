@@ -118,6 +118,7 @@ test('memory stays flat over a long game', async ({ page, browserName }) => {
   expect(after.particles).toBe(0);
   expect(after.rings).toBe(0);
   expect(after.beams).toBe(0);
+  expect(after.streaks).toBe(0);
   expect(after.texts).toBe(0);
   expect(after.listeners).toBe(warm.listeners);
   expect(after.nodes - warm.nodes).toBeLessThanOrEqual(20);
