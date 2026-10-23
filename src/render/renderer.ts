@@ -45,6 +45,13 @@ export interface Particle {
   gravity: number;
   /** Rotation speed in radians per second. */
   spin: number;
+  /**
+   * Special particles: puffs of dust, tumbling block debris, confetti and
+   * glowing motes. Plain particles leave it out and are drawn as `shape`.
+   */
+  kind?: 'dust' | 'block' | 'confetti' | 'mote';
+  /** Colour id of the block a 'block' particle is drawn as. */
+  block?: number;
 }
 
 /** An expanding shockwave ring. */
@@ -65,6 +72,16 @@ export interface Beam {
   start: number;
 }
 
+/** A bright streak racing along a cleared line, away from where the piece landed. */
+export interface Streak {
+  row?: number;
+  col?: number;
+  /** Position along the line it starts from, in cells. */
+  from: number;
+  color: string;
+  start: number;
+}
+
 export interface FloatingText {
   text: string;
   x: number;
@@ -75,6 +92,8 @@ export interface FloatingText {
   duration: number;
   /** Big centred banners pop in; small popups just float up. */
   banner?: boolean;
+  /** Keeps wobbling after popping in (combo counters). */
+  bounce?: boolean;
 }
 
 export interface Scene {
@@ -94,25 +113,49 @@ export interface Scene {
   flying: FlyingPiece | null;
   trayDealtAt: number;
   placed: { cells: Set<number>; start: number } | null;
+  /** Blocks near a placed piece bob in a wave spreading out from its centre (in cells). */
+  ripple: { r: number; c: number; start: number } | null;
   clearing: { cells: ClearingCell[]; start: number } | null;
   particles: Particle[];
   rings: Ring[];
   beams: Beam[];
+  streaks: Streak[];
   texts: FloatingText[];
   shake: { start: number; power: number } | null;
+  /** A burst of light where lines were cleared; `power` 0–1. */
+  flash: { x: number; y: number; power: number; color: string; start: number } | null;
+  /** Glow pulsing in from the screen edges on combos and board clears; `power` 0–1. */
+  pulse: { power: number; color: string; start: number } | null;
   gameOverAt: number | null;
 }
 
 export const CLEAR_DURATION = 420;
-export const PLACE_DURATION = 180;
+export const PLACE_DURATION = 260;
 export const DEAL_DURATION = 320;
 export const GAME_OVER_FILL = 900;
 export const BEAM_DURATION = 520;
 export const STYLE_WAVE_DURATION = 1100;
+export const STREAK_DURATION = 380;
+export const FLASH_DURATION = 280;
+export const PULSE_DURATION = 750;
+/** How long each block bobs, and how much later each cell of distance starts. */
+const RIPPLE_BOB = 240;
+const RIPPLE_STEP = 45;
+const RIPPLE_REACH = 4;
+/** A row of blocks hops as it turns grey at game over. */
+const GAME_OVER_HOP = 260;
+/** The shine sweeping over a lucky tray once its pieces have slid in. */
+export const LUCKY_SHINE_DELAY = DEAL_DURATION + 80;
+const LUCKY_SHINE_DURATION = 650;
+const LUCKY_SHINE_STAGGER = 110;
 
 const easeOutBack = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
+
+const motionQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+/** Players who ask for less motion get calmer screen-wide effects. */
+export const prefersReducedMotion = () => !!motionQuery?.matches;
 
 export function trayPiecePosition(layout: Layout, slot: number, shape: Shape) {
   const s = layout.slots[slot];
@@ -139,15 +182,20 @@ export class Renderer {
     return (
       !!scene.flying ||
       !!scene.placed ||
+      !!scene.ripple ||
       !!scene.clearing ||
       scene.particles.length > 0 ||
       scene.rings.length > 0 ||
       scene.beams.length > 0 ||
+      scene.streaks.length > 0 ||
       scene.texts.length > 0 ||
       scene.styleWaveAt !== null ||
       !!scene.shake ||
+      !!scene.flash ||
+      !!scene.pulse ||
       t - scene.trayDealtAt < DEAL_DURATION + 200 ||
-      (scene.gameOverAt !== null && t - scene.gameOverAt < GAME_OVER_FILL + 100)
+      (scene.lucky && t - scene.trayDealtAt < LUCKY_SHINE_DELAY + LUCKY_SHINE_DURATION + LUCKY_SHINE_STAGGER * 2 + 50) ||
+      (scene.gameOverAt !== null && t - scene.gameOverAt < GAME_OVER_FILL + GAME_OVER_HOP + 100)
     );
   }
 
@@ -176,21 +224,32 @@ export class Renderer {
       ctx.translate(Math.sin(t * 45) * p, Math.cos(t * 38) * p * 0.6);
     }
     this.drawBoard(scene);
+    this.drawClearPreview(scene);
     this.drawBeams(scene);
+    this.drawStreaks(scene);
     this.drawStyleWave(scene);
     ctx.restore();
 
+    this.drawFlash(scene);
     this.drawTray(scene);
     this.drawRings(scene);
     this.drawParticles(scene);
     if (scene.flying) this.drawFlying(scene, scene.flying);
-    if (scene.drag) this.drawPiece(scene.drag.piece.shape, scene.drag.piece.color, scene.drag.x, scene.drag.y, scene.drag.cell, 1, true);
+    if (scene.drag) {
+      this.drawDragHalo(scene, scene.drag);
+      this.drawPiece(scene.drag.piece.shape, scene.drag.piece.color, scene.drag.x, scene.drag.y, scene.drag.cell, 1, true);
+    }
+    this.drawGameOverShade(scene);
     this.drawTexts(scene);
+    this.drawPulse(scene);
   }
 
   private expire(scene: Scene): void {
     const t = scene.now;
     if (scene.placed && t - scene.placed.start > PLACE_DURATION) scene.placed = null;
+    if (scene.ripple && t - scene.ripple.start > RIPPLE_BOB + RIPPLE_STEP * RIPPLE_REACH) scene.ripple = null;
+    if (scene.flash && t - scene.flash.start > FLASH_DURATION) scene.flash = null;
+    if (scene.pulse && t - scene.pulse.start > PULSE_DURATION) scene.pulse = null;
     if (scene.clearing) {
       const maxDelay = Math.max(0, ...scene.clearing.cells.map((c) => c.delay));
       if (t - scene.clearing.start > CLEAR_DURATION + maxDelay) scene.clearing = null;
@@ -201,6 +260,7 @@ export class Renderer {
     scene.particles = scene.particles.filter((p) => t - p.born < p.life);
     scene.rings = scene.rings.filter((r) => t - r.start < r.duration);
     scene.beams = scene.beams.filter((b) => t - b.start < BEAM_DURATION);
+    scene.streaks = scene.streaks.filter((b) => t - b.start < STREAK_DURATION);
     scene.texts = scene.texts.filter((p) => t - p.start < p.duration);
   }
 
@@ -317,6 +377,8 @@ export class Renderer {
     if (target && drag) for (const [dr, dc] of drag.piece.shape.cells) ghost.add(idx(target.r + dr, target.c + dc));
 
     const grayRows = scene.gameOverAt === null ? -1 : Math.floor(clamp01((now - scene.gameOverAt) / GAME_OVER_FILL) * (SIZE + 1));
+    const breath = 0.5 + 0.5 * Math.sin(now / 130);
+    const ripple = scene.ripple;
 
     for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
@@ -330,16 +392,46 @@ export class Renderer {
           continue;
         }
         if (!color) {
-          if (ghost.has(i) && drag) this.blit(drag.piece.color, x, y, cell, dpr, 0.4);
+          // The ghost of the dragged piece breathes softly.
+          if (ghost.has(i) && drag) this.blit(drag.piece.color, x, y, cell, dpr, 0.32 + 0.14 * breath);
           continue;
         }
-        if (grayRows > SIZE - 1 - r) color = 0;
-        let scale = 1;
-        if (scene.placed?.cells.has(i)) {
-          const t = clamp01((now - scene.placed.start) / PLACE_DURATION);
-          scale = 0.85 + 0.15 * easeOutBack(t);
+        let sx = 1;
+        let sy = 1;
+        let dy = 0;
+        let impact = 0;
+        if (grayRows > SIZE - 1 - r) {
+          color = 0;
+          // Each row hops as it turns grey, so the game over runs up the board in a wave.
+          const hop = (now - scene.gameOverAt! - ((SIZE - r) / (SIZE + 1)) * GAME_OVER_FILL) / GAME_OVER_HOP;
+          if (hop > 0 && hop < 1) {
+            const h = Math.sin(hop * Math.PI);
+            dy = -cell * 0.16 * h;
+            sx = 1 - 0.06 * h;
+            sy = 1 + 0.06 * h;
+          }
         }
-        this.blit(color, x, y, cell, dpr, 1, scale);
+        if (scene.placed?.cells.has(i)) {
+          // Lands squashed, springs up a little tall, then settles on its bottom edge.
+          const t = clamp01((now - scene.placed.start) / PLACE_DURATION);
+          const k = Math.cos(t * Math.PI * 2.5) * (1 - t) * (1 - t);
+          const grow = 0.9 + 0.1 * easeOutCubic(Math.min(1, t * 3));
+          sx = grow * (1 + 0.16 * k);
+          sy = grow * (1 - 0.16 * k);
+          dy = (cell * (1 - sy)) / 2;
+          impact = 1 - t / 0.35;
+        } else if (ripple) {
+          // Neighbours dip as the wave from the placed piece passes them.
+          const d = Math.hypot(r + 0.5 - ripple.r, c + 0.5 - ripple.c);
+          const t = (now - ripple.start - d * RIPPLE_STEP) / RIPPLE_BOB;
+          if (d < RIPPLE_REACH && t > 0 && t < 1) sx = sy = 1 - 0.1 * (1 - d / RIPPLE_REACH) * Math.sin(t * Math.PI);
+        }
+        this.blit(color, x, y + dy, cell, dpr, 1, sx, sy);
+        if (impact > 0) {
+          ctx.fillStyle = `rgba(255,255,255,${0.5 * impact})`;
+          roundRect(ctx, x + cell * 0.1, y + dy + cell * 0.1, cell * 0.8, cell * 0.8, cell * 0.14);
+          ctx.fill();
+        }
       }
     }
 
@@ -359,15 +451,15 @@ export class Renderer {
     }
   }
 
-  private blit(color: number, x: number, y: number, size: number, dpr: number, alpha = 1, scale = 1): void {
+  private blit(color: number, x: number, y: number, size: number, dpr: number, alpha = 1, scale = 1, scaleY = scale): void {
     const { ctx } = this;
     // Animated pieces change size every frame; caching a sprite per size would
     // create hundreds of canvases, so they all scale the board-sized one.
     const sprite = blockSprite(color, this.spriteSize, dpr, this.style);
-    const s = size * scale;
-    const o = (size - s) / 2;
+    const w = size * scale;
+    const h = size * scaleY;
     if (alpha !== 1) ctx.globalAlpha = alpha;
-    ctx.drawImage(sprite, x + o, y + o, s, s);
+    ctx.drawImage(sprite, x + (size - w) / 2, y + (size - h) / 2, w, h);
     if (alpha !== 1) ctx.globalAlpha = 1;
   }
 
@@ -395,7 +487,32 @@ export class Renderer {
     for (const { piece, i, offset, alpha } of shown) {
       const pos = trayPiecePosition(layout, i, piece.shape);
       this.drawPiece(piece.shape, scene.playable[i] ? piece.color : 0, pos.x + offset, pos.y, pos.cell, alpha);
+      if (scene.lucky && scene.playable[i]) this.drawLuckyShine(scene, piece.shape, i, pos.x + offset, pos.y, pos.cell);
     }
+  }
+
+  /** A shine sweeping diagonally over each piece of a lucky tray once it has slid in. */
+  private drawLuckyShine(scene: Scene, shape: Shape, slot: number, x: number, y: number, cell: number): void {
+    const t = (scene.now - scene.trayDealtAt - LUCKY_SHINE_DELAY - slot * LUCKY_SHINE_STAGGER) / LUCKY_SHINE_DURATION;
+    if (t <= 0 || t >= 1) return;
+    const { ctx } = this;
+    const w = shape.cols * cell;
+    const h = shape.rows * cell;
+    ctx.save();
+    ctx.beginPath();
+    for (const [r, c] of shape.cells) ctx.rect(x + c * cell + cell * 0.06, y + r * cell + cell * 0.06, cell * 0.88, cell * 0.88);
+    ctx.clip();
+    // The gradient itself slides along the diagonal; beyond its ends it stays clear.
+    const band = 0.22;
+    const mid = -band + easeOutCubic(t) * (1 + band * 2);
+    const grad = ctx.createLinearGradient(x + w * (mid - band), y + h * (mid - band), x + w * (mid + band), y + h * (mid + band));
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.8)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
   }
 
   /** Soft halo behind a piece of a lucky tray, so help from the dealer is visible. */
@@ -420,13 +537,22 @@ export class Renderer {
   private drawParticles(scene: Scene): void {
     const { ctx } = this;
     const glow = scene.style.tier.fx.glow;
-    if (glow) ctx.globalCompositeOperation = 'lighter';
+    // Block debris, confetti and dust are solid; sparks and motes add light.
+    let blend: GlobalCompositeOperation = 'source-over';
+    const setBlend = (op: GlobalCompositeOperation) => {
+      if (op !== blend) ctx.globalCompositeOperation = blend = op;
+    };
     for (const p of scene.particles) {
       if (scene.now < p.born) continue;
       const age = (scene.now - p.born) / 1000;
       const k = 1 - (scene.now - p.born) / p.life;
       const x = p.x + p.vx * age;
       const y = p.y + p.vy * age + p.gravity * age * age;
+      if (p.kind) {
+        this.drawSpecialParticle(p, x, y, age, Math.max(0, k), setBlend);
+        continue;
+      }
+      setBlend(glow ? 'lighter' : 'source-over');
       const s = p.size * (0.4 + 0.6 * k);
       ctx.fillStyle = rgba(p.color, Math.max(0, k));
       switch (p.shape) {
@@ -477,7 +603,69 @@ export class Renderer {
         }
       }
     }
-    if (glow) ctx.globalCompositeOperation = 'source-over';
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /** Draws a particle with a `kind`; `k` runs from 1 at birth to 0 at the end of its life. */
+  private drawSpecialParticle(p: Particle, x: number, y: number, age: number, k: number, setBlend: (op: GlobalCompositeOperation) => void): void {
+    const { ctx } = this;
+    switch (p.kind) {
+      case 'dust': {
+        // A soft puff that swells and thins out: a faint outer cloud around a denser core.
+        setBlend('source-over');
+        const r = (p.size * (1.8 - k)) / 2;
+        ctx.fillStyle = rgba(p.color, 0.22 * k);
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x, y, r * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'block': {
+        // A chunk of a cleared block, tumbling away.
+        setBlend('source-over');
+        const s = p.size * (0.5 + 0.5 * k);
+        ctx.globalAlpha = Math.min(1, k * 2.5);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(p.spin * age);
+        ctx.drawImage(blockSprite(p.block ?? 0, this.spriteSize, this.dpr, this.style), -s / 2, -s / 2, s, s);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case 'confetti': {
+        // A paper strip swaying as it falls and flipping over, so its width flickers.
+        setBlend('source-over');
+        const sx = x + Math.sin(age * 3 + p.spin) * p.size * 1.6;
+        ctx.fillStyle = rgba(p.color, Math.min(1, k * 4));
+        ctx.save();
+        ctx.translate(sx, y);
+        ctx.rotate(p.spin * 0.35 + age * p.spin * 0.4);
+        ctx.scale(1, Math.cos(age * (5 + Math.abs(p.spin))));
+        ctx.fillRect(-p.size / 2, -p.size * 0.3, p.size, p.size * 0.6);
+        ctx.restore();
+        break;
+      }
+      case 'mote': {
+        // A soft glint drifting upwards, twinkling as it goes.
+        setBlend('lighter');
+        const twinkle = 0.65 + 0.35 * Math.sin(age * 9 + p.spin * 3);
+        const s = p.size * (0.6 + 0.4 * twinkle);
+        const mx = x + Math.sin(age * 2.2 + p.spin) * this.spriteSize * 0.25;
+        ctx.fillStyle = rgba(p.color, Math.sin(k * Math.PI) * twinkle * 0.9);
+        ctx.beginPath();
+        ctx.arc(mx, y, s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = rgba(p.color, Math.sin(k * Math.PI) * twinkle * 0.25);
+        ctx.beginPath();
+        ctx.arc(mx, y, s * 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+    }
   }
 
   private drawRings(scene: Scene): void {
@@ -551,6 +739,151 @@ export class Renderer {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  /** Rows and columns the dragged piece would clear pulse with light, framed in the glow colour. */
+  private drawClearPreview(scene: Scene): void {
+    const lines = scene.drag?.target?.lines;
+    if (!lines || lines.rows.length + lines.cols.length === 0) return;
+    const { ctx } = this;
+    const { cell, boardX, boardY, boardSize } = scene.layout;
+    const { palette } = scene.style;
+    const pulse = 0.5 + 0.5 * Math.sin(scene.now / 110);
+    const rects = [
+      ...lines.rows.map((r) => [boardX, boardY + r * cell, boardSize, cell]),
+      ...lines.cols.map((c) => [boardX + c * cell, boardY, cell, boardSize]),
+    ];
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255,255,255,${0.06 + 0.12 * pulse})`;
+    for (const [x, y, w, h] of rects) ctx.fillRect(x, y, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = rgba(palette.glow, 0.45 + 0.4 * pulse);
+    ctx.lineWidth = Math.max(1.5, cell * (0.05 + 0.03 * pulse));
+    for (const [x, y, w, h] of rects) {
+      roundRect(ctx, x + 1, y + 1, w - 2, h - 2, cell * 0.16);
+      ctx.stroke();
+    }
+  }
+
+  /** Bright streaks racing from where the piece landed to both ends of each cleared line. */
+  private drawStreaks(scene: Scene): void {
+    if (!scene.streaks.length) return;
+    const { ctx } = this;
+    const { cell, boardX, boardY } = scene.layout;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const st of scene.streaks) {
+      const t = clamp01((scene.now - st.start) / STREAK_DURATION);
+      if (t <= 0) continue;
+      const horizontal = st.row !== undefined;
+      const across = horizontal ? boardY + (st.row! + 0.5) * cell : boardX + (st.col! + 0.5) * cell;
+      const origin = horizontal ? boardX : boardY;
+      const width = cell * 0.26 * (1 - t * 0.6);
+      const length = cell * (1 + 2.5 * t);
+      for (const dir of [-1, 1]) {
+        // Both halves reach just past their end of the line at the same moment.
+        const reach = (dir > 0 ? SIZE - st.from : st.from) + 0.8;
+        const head = origin + (st.from + dir * easeOutCubic(t) * reach) * cell;
+        const tail = head - dir * length;
+        const grad = horizontal ? ctx.createLinearGradient(tail, 0, head, 0) : ctx.createLinearGradient(0, tail, 0, head);
+        grad.addColorStop(0, rgba(st.color, 0));
+        grad.addColorStop(0.7, rgba(st.color, 0.7 * (1 - t)));
+        grad.addColorStop(1, `rgba(255,255,255,${1 - t})`);
+        ctx.fillStyle = grad;
+        const a = Math.min(head, tail);
+        if (horizontal) ctx.fillRect(a, across - width / 2, length, width);
+        else ctx.fillRect(across - width / 2, a, width, length);
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /** A burst of light from the cleared lines; big clears also tint the whole screen for a moment. */
+  private drawFlash(scene: Scene): void {
+    const f = scene.flash;
+    if (!f) return;
+    const t = clamp01((scene.now - f.start) / FLASH_DURATION);
+    if (t <= 0) return;
+    const { ctx } = this;
+    const { cell, width, height } = scene.layout;
+    const fade = (1 - t) * (1 - t);
+    ctx.globalCompositeOperation = 'lighter';
+    if (f.power > 0.5 && !prefersReducedMotion()) {
+      ctx.fillStyle = rgba(f.color, 0.18 * (f.power - 0.4) * fade);
+      ctx.fillRect(0, 0, width, height);
+    }
+    const radius = cell * (2.5 + 4 * f.power) * (0.5 + 0.5 * easeOutCubic(t));
+    const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, radius);
+    grad.addColorStop(0, `rgba(255,255,255,${0.6 * f.power * fade})`);
+    grad.addColorStop(0.35, rgba(f.color, 0.45 * f.power * fade));
+    grad.addColorStop(1, rgba(f.color, 0));
+    ctx.fillStyle = grad;
+    ctx.fillRect(f.x - radius, f.y - radius, radius * 2, radius * 2);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /** Soft glow under the dragged piece, brighter and pulsing when the drop would clear lines. */
+  private drawDragHalo(scene: Scene, d: DragView): void {
+    const { ctx } = this;
+    const { palette, tier } = scene.style;
+    const w = d.piece.shape.cols * d.cell;
+    const h = d.piece.shape.rows * d.cell;
+    const cx = d.x + w / 2;
+    const cy = d.y + h / 2;
+    const lines = d.target ? d.target.lines.rows.length + d.target.lines.cols.length : 0;
+    const strength = lines ? 0.4 + 0.2 * Math.sin(scene.now / 110) : 0.22;
+    const radius = Math.max(w, h) * 0.6 + d.cell * 0.9;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    grad.addColorStop(0, rgba(palette.glow, strength));
+    grad.addColorStop(1, rgba(palette.glow, 0));
+    if (tier.fx.glow) ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /** Light pulsing in from the screen edges on combos and board clears. */
+  private drawPulse(scene: Scene): void {
+    const p = scene.pulse;
+    if (!p) return;
+    const t = clamp01((scene.now - p.start) / PULSE_DURATION);
+    if (t <= 0) return;
+    const { ctx } = this;
+    const { width, height } = scene.layout;
+    const envelope = t < 0.18 ? t / 0.18 : 1 - easeOutCubic((t - 0.18) / 0.82);
+    const alpha = p.power * envelope * (prefersReducedMotion() ? 0.35 : 0.7);
+    const depth = Math.min(width, height) * (0.08 + 0.08 * p.power);
+    const edge = (x0: number, y0: number, x1: number, y1: number) => {
+      const grad = ctx.createLinearGradient(x0, y0, x1, y1);
+      grad.addColorStop(0, rgba(p.color, alpha));
+      grad.addColorStop(1, rgba(p.color, 0));
+      return grad;
+    };
+    if (scene.style.tier.fx.glow) ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = edge(0, 0, 0, depth);
+    ctx.fillRect(0, 0, width, depth);
+    ctx.fillStyle = edge(0, height, 0, height - depth);
+    ctx.fillRect(0, height - depth, width, depth);
+    ctx.fillStyle = edge(0, 0, depth, 0);
+    ctx.fillRect(0, 0, depth, height);
+    ctx.fillStyle = edge(width, 0, width - depth, 0);
+    ctx.fillRect(width - depth, 0, depth, height);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /** The screen dims towards the edges once no piece fits any more. */
+  private drawGameOverShade(scene: Scene): void {
+    if (scene.gameOverAt === null) return;
+    const t = clamp01((scene.now - scene.gameOverAt) / GAME_OVER_FILL);
+    if (t <= 0) return;
+    const { ctx } = this;
+    const { width, height, boardX, boardY, boardSize } = scene.layout;
+    const cx = boardX + boardSize / 2;
+    const cy = boardY + boardSize / 2;
+    const grad = ctx.createRadialGradient(cx, cy, boardSize * 0.45, cx, cy, Math.hypot(width, height) * 0.6);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(0,0,0,${0.45 * easeOutCubic(t)})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+  }
+
   private drawTexts(scene: Scene): void {
     const { ctx } = this;
     const { tier, palette } = scene.style;
@@ -562,21 +895,35 @@ export class Renderer {
       let scale = 1;
       let dy = 0;
       let alpha = 1;
+      let tilt = 0;
       if (ft.banner) {
         scale = t < 0.2 ? easeOutBack(t / 0.2) : 1;
         alpha = t > 0.75 ? 1 - (t - 0.75) / 0.25 : 1;
         dy = -t * 20;
       } else {
+        // Small popups punch in, then float up.
+        scale = t < 0.12 ? 0.4 + 0.6 * easeOutBack(t / 0.12) : 1;
         dy = -easeOutCubic(t) * 50;
         alpha = t > 0.6 ? 1 - (t - 0.6) / 0.4 : 1;
       }
+      if (ft.bounce && t >= 0.2) {
+        // Combo counters keep wobbling, dying down as they fade.
+        const w = Math.sin((t - 0.2) * Math.PI * 7) * (1 - t);
+        scale *= 1 + 0.12 * w;
+        tilt = 0.06 * w;
+      }
       ctx.save();
       ctx.globalAlpha = Math.max(0, alpha);
-      ctx.translate(ft.x, ft.y + dy);
-      ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale));
       // Scale the text down if it would not fit the screen in this style's font.
       ctx.font = `${tier.fontWeight} ${ft.size}px ${tier.font}`;
-      const fit = Math.min(1, (scene.layout.width * 0.92) / Math.max(1, ctx.measureText(ft.text).width));
+      const textWidth = Math.max(1, ctx.measureText(ft.text).width);
+      const fit = Math.min(1, (scene.layout.width * 0.92) / textWidth);
+      // Popups near the screen edges move in so they stay readable.
+      const half = (textWidth * fit) / 2 + ft.size * 0.15;
+      const x = ft.banner ? ft.x : Math.max(half, Math.min(scene.layout.width - half, ft.x));
+      ctx.translate(x, ft.y + dy);
+      if (tilt) ctx.rotate(tilt);
+      ctx.scale(Math.max(0.01, scale), Math.max(0.01, scale));
       if (fit < 1) ctx.scale(fit, fit);
       ctx.lineJoin = 'round';
       ctx.lineWidth = Math.max(3, ft.size * 0.14);
