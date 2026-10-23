@@ -80,6 +80,7 @@ opt-level = 3
 lto = "thin"
 codegen-units = 4
 panic = "abort"
+strip = "debuginfo"
 
 [profile.dev]
 # The sprite rasteriser and the synth are far too slow unoptimised.

@@ -16,6 +16,7 @@ impl Rng {
     }
 
     /// Returns a float in [0, 1).
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> f64 {
         self.state = self.state.wrapping_add(0x6d2b79f5);
         let mut t = self.state;

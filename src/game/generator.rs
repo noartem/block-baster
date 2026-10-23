@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn always_deals_a_lucky_tray_onto_a_crowded_board() {
-        assert!(RESCUE_FILL <= 0.45);
+        const { assert!(RESCUE_FILL <= 0.45) };
         assert!(is_lucky_deal(1e6, RESCUE_FILL, 0));
         assert!(!is_lucky_deal(1e6, RESCUE_FILL - 0.1, 0));
     }
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn makes_a_crowded_lucky_tray_clear_a_line_whenever_pieces_can() {
         let b = board_from(&[".#.#.#.#", ".#.#.#.#", ".#.#.#.#", ".#.#.#.#", "###.####", ".#.#.#.#", ".#.#.#.#", "#.#.#.#."]);
-        assert!(35.0 / 64.0 >= RESCUE_FILL);
+        const { assert!(35.0 / 64.0 >= RESCUE_FILL) };
         let masks = to_masks(&b);
         let mut rng = Rng::new(11);
         for _ in 0..30 {

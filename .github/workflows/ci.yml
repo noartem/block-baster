@@ -1,7 +1,8 @@
 name: CI/CD
 
-# Pull requests: typecheck, tests, README screenshots, an APK build and the promo video (downloadable as workflow artifacts).
-# Push to main: the same, then publish a GitHub Release with the APK, screenshots and promo video, and deploy the web version.
+# Pull requests: Rust tests, the web build with its browser tests and README media, an APK, desktop
+# builds and the promo video (all downloadable as workflow artifacts).
+# Push to main: the same, then publish a GitHub Release and deploy the web version.
 # Push a v* tag: publish a release under that tag.
 on:
   push:
@@ -18,21 +19,74 @@ concurrency:
   # Never cancel a run on main halfway through publishing a release.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  test:
-    name: Typecheck & tests
+  rust:
+    name: Rust tests
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown,aarch64-linux-android
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update -q && sudo apt-get install -yq libasound2-dev
+      - id: version
+        run: echo "version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)" >> "$GITHUB_OUTPUT"
+      - run: cargo test --locked
+      - run: cargo clippy --locked --all-targets
+      - name: Check the WebAssembly and Android targets
+        run: |
+          cargo check --locked --lib --target wasm32-unknown-unknown
+          cargo check --locked --lib --target aarch64-linux-android
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-bindgen-cli (same version as in Cargo.lock)
+        run: |
+          version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')
+          if [ "$(wasm-bindgen --version 2>/dev/null)" != "wasm-bindgen $version" ]; then
+            cargo install wasm-bindgen-cli --version "$version" --locked
+          fi
+      - run: ./scripts/build-web.sh
+      - uses: actions/upload-artifact@v5
+        with:
+          name: web
+          path: dist
+          retention-days: 30
+
+  browser-tests:
+    name: Browser tests & README media
+    needs: web
+    runs-on: ubuntu-latest
+    env:
+      SKIP_BUILD: '1'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
+      - uses: actions/download-artifact@v5
+        with:
+          name: web
+          path: dist
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npx playwright test --workers 2
       - name: Capture README screenshots and gameplay GIF
         run: |
           command -v ffmpeg >/dev/null || (sudo apt-get update -q && sudo apt-get install -yq ffmpeg)
@@ -53,29 +107,27 @@ jobs:
 
   android:
     name: Android APK
-    needs: test
+    needs: rust
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     env:
       HAS_RELEASE_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 22
-          cache: npm
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
           cache: gradle
-      # ubuntu-latest ships the Android SDK (ANDROID_HOME); Gradle fetches any missing platform.
-      - id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - run: npm ci
-      - name: Build web app and sync into the Android project
-        run: npm run android:sync
+      - run: command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
+      # ubuntu-latest ships the Android SDK (ANDROID_HOME) and NDK; Gradle fetches any missing platform.
+      - name: Build the game library for every ABI
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: cargo ndk --platform 26 -t arm64-v8a -t armeabi-v7a -t x86_64 -o android/app/src/main/jniLibs build --lib --release --locked
       - name: Decode release keystore (optional)
         if: env.HAS_RELEASE_KEY == 'true'
         env:
@@ -90,12 +142,13 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
-      - name: Verify APK signature
+        run: ./gradlew assembleRelease -PskipCargo --no-daemon --stacktrace
+      - name: Verify APK signature and contents
         run: |
           APK=android/app/build/outputs/apk/release/app-release.apk
           APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
           "$APKSIGNER" verify --print-certs "$APK"
+          unzip -l "$APK" | grep -E 'lib/(arm64-v8a|armeabi-v7a|x86_64)/libblock_baster.so'
           cp "$APK" block-baster.apk
       - uses: actions/upload-artifact@v5
         with:
@@ -103,9 +156,43 @@ jobs:
           path: block-baster.apk
           retention-days: 30
 
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    needs: rust
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest, bin: block-baster }
+          - { name: windows-x86_64, os: windows-latest, bin: block-baster.exe }
+          - { name: macos-arm64, os: macos-latest, bin: block-baster }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -yq libasound2-dev
+      - run: cargo build --release --locked --bin block-baster
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p "block-baster-${{ matrix.name }}"
+          cp "target/release/${{ matrix.bin }}" LICENSE "block-baster-${{ matrix.name }}/"
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a "block-baster-${{ matrix.name }}.zip" "block-baster-${{ matrix.name }}" >/dev/null
+          else
+            tar czf "block-baster-${{ matrix.name }}.tar.gz" "block-baster-${{ matrix.name }}"
+          fi
+      - uses: actions/upload-artifact@v5
+        with:
+          name: desktop-${{ matrix.name }}
+          path: block-baster-${{ matrix.name }}.*
+          retention-days: 30
+
   promo:
     name: Promo video
-    needs: test
+    needs: web
     runs-on: ubuntu-latest
     env:
       # The prebuilt FFmpeg that fframes downloads links against an older x264 than Ubuntu ships,
@@ -123,16 +210,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: promo
+          workspaces: |
+            . -> target
+            promo -> target
       - name: Install system packages
-        run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg libx264-dev nasm clang
+        run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg libx264-dev nasm clang libasound2-dev
+      - uses: actions/download-artifact@v5
+        with:
+          name: web
+          path: dist
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       # Fresh footage from this commit's build, so the video always shows the current game.
       - name: Capture game footage
-        run: |
-          npm run build
-          node promo/capture/capture.mjs
+        run: node promo/capture/capture.mjs
       - name: Synthesise soundtrack
         run: |
           pip install numpy
@@ -152,7 +243,7 @@ jobs:
 
   release:
     name: GitHub Release
-    needs: [android, promo]
+    needs: [rust, browser-tests, android, desktop, promo]
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
@@ -163,6 +254,10 @@ jobs:
           name: block-baster-apk
       - uses: actions/download-artifact@v5
         with:
+          pattern: desktop-*
+          merge-multiple: true
+      - uses: actions/download-artifact@v5
+        with:
           name: screenshots
       - uses: actions/download-artifact@v5
         with:
@@ -170,7 +265,7 @@ jobs:
       - name: Pick release tag
         id: tag
         env:
-          VERSION: ${{ needs.android.outputs.version }}
+          VERSION: ${{ needs.rust.outputs.version }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
@@ -187,6 +282,8 @@ jobs:
           # The README embeds the media below via releases/latest/download/<file>.
           files: |
             block-baster.apk
+            block-baster-*.tar.gz
+            block-baster-*.zip
             showcase.png
             gameplay.gif
             screenshot-*.png
@@ -195,7 +292,9 @@ jobs:
           make_latest: true
           generate_release_notes: true
           body: |
-            **Install on Android:** download `block-baster.apk` below, open it on your phone and allow installing apps from this source.
+            **Android:** download `block-baster.apk` below, open it on your phone and allow installing apps from this source.
+
+            **Desktop:** `block-baster-linux-x86_64.tar.gz`, `block-baster-windows-x86_64.zip` or `block-baster-macos-arm64.tar.gz`; unpack and run `block-baster`.
 
             **Promo video:** `block-baster-promo.mp4`, rendered from this build's real gameplay.
 
@@ -203,7 +302,7 @@ jobs:
 
   deploy-web:
     name: Deploy web version
-    needs: test
+    needs: [rust, browser-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -216,13 +315,10 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/download-artifact@v5
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
+          name: web
+          path: dist
       - uses: actions/configure-pages@v5
       # Re-running a job keeps earlier attempts' artifacts, and deploy-pages fails when two
       # share a name, so every attempt uploads under its own name.
