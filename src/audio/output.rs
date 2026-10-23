@@ -26,7 +26,9 @@ impl Output {
     pub fn open(
         make: impl FnOnce(f32) -> Arc<Mutex<Engine>>,
     ) -> Result<(Output, Arc<Mutex<Engine>>), String> {
-        let host = cpal::default_host();
+        // `default_host` panics when the platform has no audio at all (e.g. a browser without Web Audio).
+        let id = *cpal::available_hosts().first().ok_or("no audio host")?;
+        let host = cpal::host_from_id(id).map_err(|e| format!("audio host unavailable: {e}"))?;
         let device = host.default_output_device().ok_or("no output device")?;
         let supported = device
             .default_output_config()

@@ -327,13 +327,15 @@ impl Ui {
         let dpr = ctx.dpr;
         let accent = p.accent;
         let level = tier.level;
+        if level == 9 {
+            // Gold lettering over a dark drop.
+            text::fill(c, 0.0, 2.0, &score_text, &text::paint(&fonts, size, Align::Center, black(0.45)));
+        }
         self.texts.draw(c, &key, tw, th + 8.0, dpr * 1.35, 1.0, |c| match level {
             7 => text::fill(c, 0.0, 0.0, &score_text, &fill),
             9 => {
-                // Gold lettering with a dark drop.
-                text::fill(c, 0.0, 2.0, &score_text, &text::paint(&fonts, size, Align::Center, black(0.45)));
                 let grad = linear(0.0, -size / 2.0, 0.0, size / 2.0, &[(0.0, Rgb::hex("#fffbe6").fv()), (0.48, accent.fv()), (0.55, accent.fv()), (1.0, Rgb::hex("#b07a10").fv())]);
-                text::fill(c, 0.0, 0.0, &score_text, &text::styled(grad, &fonts, size, Align::Center));
+                text::fill_gradient(c, &score_text, &fill, &grad, tw, th);
             }
             _ => text::fill_shadowed(c, 0.0, 0.0, &score_text, &fill, 3.0, 0.28),
         });

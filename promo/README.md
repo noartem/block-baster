@@ -28,7 +28,6 @@ score on. The game's sound effects play on top, exactly on the frames where the 
 ```
 promo/
   capture/capture.mjs   Playwright: stages the game, captures the screenshots and the gameplay clip
-  capture/fonts.py      converts the game's Baloo 2 web font to TTF for fframes
   audio/music.py        builds media/music.wav: the game's adaptive music, rendered along an intensity
                         curve by `cargo run --release --bin soundtrack`, + the game's sound effects
   media/                everything the video uses (screenshots, gameplay.mp4, fonts, music)
@@ -47,10 +46,9 @@ reproducible however slow screenshots are. The touch position of each frame is s
 ```bash
 # from the repository root
 npm ci
-npm run build
+npm run build:web                   # the WebAssembly build in dist/ (see scripts/build-web.sh)
 node promo/capture/capture.mjs      # needs ffmpeg on PATH (encodes media/gameplay.mp4)
-pip install fonttools numpy
-python3 promo/capture/fonts.py
+pip install numpy
 python3 promo/audio/music.py        # renders the music with `cargo run --release --bin soundtrack`
 ```
 

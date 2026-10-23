@@ -118,7 +118,7 @@ def hz(midi):
     return 440.0 * 2 ** ((midi - 69) / 12)
 
 
-# --- Game sound effects (same recipes as src/audio/sound.ts) -----------------------------------
+# --- Game sound effects (same recipes as src/audio/sound.rs) -----------------------------------
 
 
 def tone(start, freq, dur, kind="sine", vol=0.3, to=None, pan=0.0):
@@ -201,7 +201,7 @@ def effects():
     pickup(f(21)); place(f(48)); clear(f(48), 1, 1)
     pickup(f(84)); place(f(111)); clear(f(111), 2, 2)
     pickup(f(157)); place(f(184)); clear(f(184), 2, 3); board_clear(f(184))
-    # The board clear switches the style half a second later (src/app.ts), with a sparkly sweep.
+    # The board clear switches the style half a second later (src/app.rs), with a sparkly sweep.
     for i, step in enumerate([0, 4, 7, 12, 16, 19, 24]):
         tone(f(199) + 0.7 + i * 0.035, 784 * 2 ** (step / 12), 0.3, "sine", 0.06)
     # Styles: each phone lands with a thud and a bell, climbing up the scale; then a fanfare for the top level.

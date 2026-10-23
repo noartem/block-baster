@@ -829,22 +829,17 @@ impl Renderer {
                 });
             }
             // Crisp outline and fill, a little larger than they ever appear.
-            self.texts.draw(c, &key, w, h, scene.dpr * 1.25, alpha.max(0.0), |c| {
-                text::stroke(c, 0.0, 0.0, label, &outline);
-                let paint = if gradient {
-                    let grad = linear(
-                        0.0,
-                        -size / 2.0,
-                        0.0,
-                        size / 2.0,
-                        &[(0.0, Rgb::hex("#fffbe6").fv()), (0.45, color.fv()), (0.55, color.fv()), (1.0, Rgb::hex("#b07a10").fv())],
-                    );
-                    text::styled(grad, &fonts, size, Align::Center)
-                } else {
-                    fill.clone()
-                };
-                text::fill(c, 0.0, 0.0, label, &paint);
-            });
+            if gradient {
+                // The gradient fill needs a texture of its own (see text::fill_gradient).
+                self.texts.draw(c, &format!("outline|{key}"), w, h, scene.dpr * 1.25, alpha.max(0.0), |c| text::stroke(c, 0.0, 0.0, label, &outline));
+                let grad = linear(0.0, -size / 2.0, 0.0, size / 2.0, &[(0.0, Rgb::hex("#fffbe6").fv()), (0.45, color.fv()), (0.55, color.fv()), (1.0, Rgb::hex("#b07a10").fv())]);
+                self.texts.draw(c, &key, w, h, scene.dpr * 1.25, alpha.max(0.0), |c| text::fill_gradient(c, label, &fill, &grad, w, h));
+            } else {
+                self.texts.draw(c, &key, w, h, scene.dpr * 1.25, alpha.max(0.0), |c| {
+                    text::stroke(c, 0.0, 0.0, label, &outline);
+                    text::fill(c, 0.0, 0.0, label, &fill);
+                });
+            }
             c.restore();
         }
     }

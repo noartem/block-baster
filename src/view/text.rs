@@ -102,3 +102,15 @@ pub fn wrap(c: &Canvas, text: &str, max_width: f32, paint: &Paint) -> Vec<String
     }
     lines
 }
+
+/// Fills text centred at the origin with a gradient. femtovg maps gradients on text per glyph,
+/// so the text is drawn solid and the gradient laid over it with `SourceIn`; this only works on
+/// a render target holding nothing else (see TextCache). `w`×`h` must cover the text.
+pub fn fill_gradient(c: &mut Canvas, text: &str, paint: &Paint, gradient: &Paint, w: f32, h: f32) {
+    let mut solid = paint.clone();
+    solid.set_color(Color::white());
+    fill(c, 0.0, 0.0, text, &solid);
+    c.global_composite_operation(femtovg::CompositeOperation::SourceIn);
+    c.fill_path(&super::draw::rect(-w / 2.0, -h / 2.0, w, h), gradient);
+    c.global_composite_operation(femtovg::CompositeOperation::SourceOver);
+}
