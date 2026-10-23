@@ -71,12 +71,18 @@ async function serve() {
 async function openGame(context, query = '?seed=7&reset') {
   const page = await context.newPage();
   await page.addInitScript(VIRTUAL_TIME);
+  // WebGL may run on the CPU (SwiftShader in CI): screenshots can wait a while for queued frames.
+  page.setDefaultTimeout(180_000);
   await page.goto(BASE + query);
   await page.waitForFunction(() => document.body.dataset.ready === 'true' && !!window.blockBaster);
   await step(page, 40);
   return page;
 }
 
+/** Moves the virtual clock on by `ms` in coarse steps, rendering far fewer frames than step(). */
+const advance = async (page, ms, chunk = 100) => {
+  for (let t = 0; t < ms; t += chunk * 5) await page.evaluate(({ n, ms }) => { for (let i = 0; i < n; i++) window.__step(ms); }, { n: 5, ms: chunk });
+};
 const step = (page, frames = 1) => page.evaluate(({ n, ms }) => { for (let i = 0; i < n; i++) window.__step(ms); }, { n: frames, ms: STEP });
 
 /**
@@ -255,7 +261,8 @@ async function captureStyles(context) {
       bb.updateStyle(0);
     }, min + 2_480);
     // Let the level-up banner and fireworks play out, and the page background fade to the new colours.
-    await step(page, 150);
+    await advance(page, 150 * STEP);
+    await step(page);
     await page.screenshot({ path: join(media, `screen-style-${level}.png`) });
     await page.close();
   }
