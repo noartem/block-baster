@@ -153,11 +153,11 @@ test('clearing the board switches the style and high scores unlock new tiers', a
 
   await page.evaluate(() => {
     const app = window.blockBaster;
-    app.game.score = 99_990;
+    app.game.score = 129_990;
     for (let c = 0; c < 7; c++) app.game.board[8 + c] = 4;
     app.commit(1, 1, 7);
   });
-  await expect(page.locator('body')).toHaveAttribute('data-tier', '3');
+  await expect(page.locator('body')).toHaveAttribute('data-tier', '7');
   await expect(page.locator('#style-name')).toContainText('Neon');
   await page.waitForTimeout(1500);
   expect(errors).toEqual([]);

@@ -2,6 +2,7 @@ import { type Board, type Lines, SIZE, idx } from '../game/board';
 import type { Piece } from '../game/game';
 import type { Shape } from '../game/shapes';
 import type { Layout } from './layout';
+import { drawMaterialFrame, isMaterialFrame } from './frames';
 import { rgba } from './palette';
 import { blockSprite } from './sprites';
 import type { ParticleShape, Style } from './styles';
@@ -255,10 +256,13 @@ export class Renderer {
     }
 
     // Board surface.
-    const inset = tier.frame === 'metal' || tier.frame === 'gold' ? pad * 0.5 : pad * 0.35;
+    const material = isMaterialFrame(tier.frame);
+    const inset = material ? pad * 0.8 : tier.frame === 'metal' || tier.frame === 'gold' ? pad * 0.5 : pad * 0.35;
     g.fillStyle = tier.frame === 'glass' ? rgba(p.board, 0.82) : p.board;
     roundRect(g, inset, inset, size - inset * 2, size - inset * 2, innerR);
     g.fill();
+    // Cookie, cardboard, iron and wood frames are drawn over the plain one.
+    if (material) drawMaterialFrame(g, tier.frame, { size, inset, cell, outerR, innerR, palette: p });
     if (tier.frame === 'glass') {
       g.lineWidth = Math.max(1, cell * 0.03);
       g.strokeStyle = 'rgba(255,255,255,0.35)';
