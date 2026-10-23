@@ -210,9 +210,9 @@ impl Ui {
         self.overlay != Overlay::None && (now - self.opened_at < 300.0 || self.game_over.as_ref().is_some_and(|g| g.record))
     }
 
-    /// True while the open card is still popping in (its hit areas move).
+    /// True while the open card is still popping in or not drawn yet (no hit areas).
     pub fn popping(&self, now: f64) -> bool {
-        self.overlay != Overlay::None && now - self.opened_at < 300.0
+        self.overlay != Overlay::None && (now - self.opened_at < 300.0 || self.rect_of(UiId::Card).is_none())
     }
 
     /// Everything a pointer could hit in the last frame, topmost first.

@@ -164,6 +164,7 @@ test('the menu closes on Escape and on a tap outside the card', async ({ page })
   await expectOverlay(page, 'none');
   await tap(page, 'menuButton');
   await expectOverlay(page, 'menu');
+  await waitUi(page, 'resume');
   await page.mouse.click(4, 4);
   await expectOverlay(page, 'none');
 });

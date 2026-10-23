@@ -372,7 +372,7 @@ fn state(app: &mut App) -> Value {
         "overlay": match app.overlay() { Overlay::None => "none", Overlay::Menu => "menu", Overlay::GameOver => "gameover" },
         "record": app.ui.game_over.as_ref().is_some_and(|g| g.record),
         "helpOpen": app.ui.help_open,
-        "popping": app.ui.popping(app.scene.now),
+        "popping": app.ui.popping(app.now()),
         "music": { "playing": app.audio.music_playing(), "bpm": music.bpm, "e": music.e, "volume": app.audio.music_volume() },
         "soundVolume": app.audio.sound_volume(),
         "stats": app.debug_stats(),

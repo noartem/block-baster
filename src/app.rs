@@ -1257,6 +1257,11 @@ impl App {
         }
     }
 
+    /// The frame clock as of the last tick, in ms.
+    pub fn now(&self) -> f64 {
+        self.now
+    }
+
     pub fn overlay(&self) -> Overlay {
         self.ui.overlay
     }
