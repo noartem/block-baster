@@ -13,3 +13,4 @@ playwright-report/
 /dist/
 /.claude/worktrees/
 /node_modules/
+!/tests/fixtures/**/*.log
