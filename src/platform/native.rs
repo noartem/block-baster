@@ -55,6 +55,9 @@ pub struct Shell<H: Host> {
     scale: f64,
     last_frame: f64,
     frames: u32,
+    /// Insets of the last resize, and when they were last checked again.
+    insets: Insets,
+    insets_checked: f64,
 }
 
 impl<H: Host> Shell<H> {
@@ -73,6 +76,8 @@ impl<H: Host> Shell<H> {
             scale: 1.0,
             last_frame: 0.0,
             frames: 0,
+            insets: Insets::default(),
+            insets_checked: 0.0,
         }
     }
 
@@ -149,6 +154,7 @@ impl<H: Host> Shell<H> {
         }
         let s = self.scale as f32;
         let i = self.host.insets(&gl.window);
+        self.insets = i;
         let insets = Insets { top: i.top / s, right: i.right / s, bottom: i.bottom / s, left: i.left / s };
         self.app.resize(size.width as f32 / s, size.height as f32 / s, s, insets);
         gl.window.request_redraw();
@@ -276,6 +282,15 @@ impl<H: Host> ApplicationHandler for Shell<H> {
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
         let now = self.now();
         self.app.tick(now);
+        // System bars can settle after the window appears (Android reports them late).
+        if now - self.insets_checked > 1000.0
+            && let Some(gl) = &self.gl
+        {
+            self.insets_checked = now;
+            if self.host.insets(&gl.window) != self.insets {
+                self.resize();
+            }
+        }
         let Some(gl) = &self.gl else {
             el.set_control_flow(ControlFlow::Wait);
             return;
