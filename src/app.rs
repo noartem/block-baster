@@ -1177,7 +1177,10 @@ impl App {
             UiId::MenuButton => self.open_menu(),
             UiId::Resume => self.close_menu(),
             UiId::Restart | UiId::Again => self.new_game(None),
-            UiId::Exit => self.platform.exit(),
+            UiId::Exit => {
+                self.save();
+                self.platform.exit();
+            }
             UiId::Help => self.ui.help_open = !self.ui.help_open,
             UiId::Link => self.platform.open_url(REPO_URL),
             UiId::Slider(_) | UiId::Card | UiId::Backdrop => {}
@@ -1241,7 +1244,10 @@ impl App {
     pub fn back_button(&mut self) {
         match self.ui.overlay {
             Overlay::Menu => self.close_menu(),
-            Overlay::GameOver => self.platform.exit(),
+            Overlay::GameOver => {
+                self.save();
+                self.platform.exit();
+            }
             Overlay::None => self.open_menu(),
         }
     }
