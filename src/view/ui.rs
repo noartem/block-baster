@@ -9,6 +9,7 @@ use femtovg::{Align, Color, LineCap, Paint, Path};
 use super::Canvas;
 use super::draw::{self, clamp01, ease_out_cubic, fill_rect, linear, round_rect};
 use super::text::{self, Fonts};
+use super::text_cache::TextCache;
 use crate::color::{Rgb, black, white};
 use crate::storage::{SettingKey, Settings};
 use crate::styles::{Style, TIERS, format_score};
@@ -146,6 +147,8 @@ pub struct Ui {
     hits: Vec<Hit>,
     /// Slider tracks from the last frame: (key, x, width).
     tracks: Vec<(SettingKey, f32, f32)>,
+    /// The score, rendered once per value.
+    texts: TextCache,
 }
 
 pub struct UiContext<'a> {
@@ -158,6 +161,7 @@ pub struct UiContext<'a> {
     pub can_vibrate: bool,
     pub native: bool,
     pub now: f64,
+    pub dpr: f32,
 }
 
 pub const HELP_1: &str = "Drag the pieces onto the 8×8 board. Fill a whole row or column to clear it. Clear several lines at once, or keep clearing on consecutive turns, for combo bonuses. The game ends when none of your pieces fit.";
@@ -184,7 +188,7 @@ impl Default for Ui {
 
 impl Ui {
     pub fn new() -> Self {
-        Ui { overlay: Overlay::None, opened_at: 0.0, help_open: false, game_over: None, pressed: None, scroll: 0.0, max_scroll: 0.0, hits: Vec::new(), tracks: Vec::new() }
+        Ui { overlay: Overlay::None, opened_at: 0.0, help_open: false, game_over: None, pressed: None, scroll: 0.0, max_scroll: 0.0, hits: Vec::new(), tracks: Vec::new(), texts: TextCache::default() }
     }
 
     pub fn open(&mut self, overlay: Overlay, now: f64) {
@@ -204,6 +208,11 @@ impl Ui {
     /// True while an overlay is popping in.
     pub fn is_animating(&self, now: f64) -> bool {
         self.overlay != Overlay::None && (now - self.opened_at < 300.0 || self.game_over.as_ref().is_some_and(|g| g.record))
+    }
+
+    /// True while the open card is still popping in (its hit areas move).
+    pub fn popping(&self, now: f64) -> bool {
+        self.overlay != Overlay::None && now - self.opened_at < 300.0
     }
 
     /// Everything a pointer could hit in the last frame, topmost first.
@@ -238,6 +247,7 @@ impl Ui {
     pub fn draw_hud(&mut self, c: &mut Canvas, ctx: &UiContext, hud: &HudInfo) {
         self.hits.clear();
         self.tracks.clear();
+        self.texts.begin_frame(c);
         let p = ctx.style.palette;
         let tier = ctx.style.tier;
         let inner_w = (ctx.width - ctx.insets.left - ctx.insets.right).min(640.0);
@@ -293,41 +303,40 @@ impl Ui {
         c.save();
         c.translate(cx, row_mid);
         c.scale(hud.bump * fit, hud.bump * fit);
-        match tier.level {
-            7 => {
-                // Neon tubes: layered glows.
-                c.set_shadow_color(p.glow2.fv());
-                c.set_shadow_blur(36.0);
-                text::fill(c, 0.0, 0.0, &score_text, &fill);
-                c.set_shadow_color(p.glow.fv());
-                c.set_shadow_blur(18.0);
-                text::fill(c, 0.0, 0.0, &score_text, &fill);
-                c.set_shadow_blur(6.0);
-                text::fill(c, 0.0, 0.0, &score_text, &fill);
-            }
-            9 => {
-                // Gold lettering with a dark drop and a glow.
-                c.set_shadow_color(p.glow.fv());
-                c.set_shadow_blur(10.0);
-                text::fill(c, 0.0, 2.0, &score_text, &text::paint(&fonts, size, Align::Center, black(0.45)));
+        let (tw, th) = (text::width(c, &score_text, &fill) + 12.0, size * 1.6);
+        // Glows (CSS text-shadow blurs, in logical pixels) go in a soft low-resolution layer.
+        let glows: &[(f32, Rgb)] = match tier.level {
+            5 | 6 | 8 => &[(18.0, p.glow)],
+            7 => &[(36.0, p.glow2), (18.0, p.glow), (6.0, p.glow)],
+            9 => &[(10.0, p.glow)],
+            _ => &[],
+        };
+        let key = format!("{score_text}|{}|{size}", ctx.style.key());
+        if !glows.is_empty() {
+            let pad = 40.0;
+            self.texts.draw(c, &format!("glow|{key}"), tw + pad * 2.0, th + pad * 2.0, 1.0, 1.0, |c| {
+                for &(blur, color) in glows {
+                    c.set_shadow_color(color.fv());
+                    c.set_shadow_blur(blur);
+                    text::fill(c, 0.0, 0.0, &score_text, &text::paint(&fonts, size, Align::Center, color.fv()));
+                }
                 c.set_shadow_color(Color::rgbaf(0.0, 0.0, 0.0, 0.0));
-                let grad = linear(0.0, -size / 2.0, 0.0, size / 2.0, &[(0.0, Rgb::hex("#fffbe6").fv()), (0.48, p.accent.fv()), (0.55, p.accent.fv()), (1.0, Rgb::hex("#b07a10").fv())]);
+                c.set_shadow_blur(0.0);
+            });
+        }
+        let dpr = ctx.dpr;
+        let accent = p.accent;
+        let level = tier.level;
+        self.texts.draw(c, &key, tw, th + 8.0, dpr * 1.35, 1.0, |c| match level {
+            7 => text::fill(c, 0.0, 0.0, &score_text, &fill),
+            9 => {
+                // Gold lettering with a dark drop.
+                text::fill(c, 0.0, 2.0, &score_text, &text::paint(&fonts, size, Align::Center, black(0.45)));
+                let grad = linear(0.0, -size / 2.0, 0.0, size / 2.0, &[(0.0, Rgb::hex("#fffbe6").fv()), (0.48, accent.fv()), (0.55, accent.fv()), (1.0, Rgb::hex("#b07a10").fv())]);
                 text::fill(c, 0.0, 0.0, &score_text, &text::styled(grad, &fonts, size, Align::Center));
             }
-            _ => {
-                if matches!(tier.level, 5 | 6 | 8) {
-                    c.set_shadow_color(p.glow.fv());
-                    c.set_shadow_blur(18.0);
-                    text::fill(c, 0.0, 3.0, &score_text, &text::paint(&fonts, size, Align::Center, black(0.28)));
-                    c.set_shadow_color(Color::rgbaf(0.0, 0.0, 0.0, 0.0));
-                    text::fill(c, 0.0, 0.0, &score_text, &fill);
-                } else {
-                    text::fill_shadowed(c, 0.0, 0.0, &score_text, &fill, 3.0, 0.28);
-                }
-            }
-        }
-        c.set_shadow_color(Color::rgbaf(0.0, 0.0, 0.0, 0.0));
-        c.set_shadow_blur(0.0);
+            _ => text::fill_shadowed(c, 0.0, 0.0, &score_text, &fill, 3.0, 0.28),
+        });
         c.restore();
 
         // Style name and progress towards the next tier.
@@ -456,18 +465,14 @@ impl Ui {
         c.translate(-ccx, -ccy);
 
         let card = round_rect(card_x, card_y, card_w, card_h, 22.0);
-        c.set_shadow_color(black(0.4));
-        c.set_shadow_blur(40.0);
-        c.set_shadow_offset(0.0, 16.0);
-        draw::fill_color(c, &card, p.card.fv());
-        c.set_shadow_offset(0.0, 0.0);
+        // CSS box-shadow 0 16px 40px rgba(0,0,0,.4), as a feathered box (live blurs are too slow).
+        let shadow = Paint::box_gradient(card_x, card_y + 16.0, card_w, card_h, 22.0, 40.0, black(0.4), black(0.0));
+        c.fill_path(&draw::rect(card_x - 50.0, card_y - 34.0, card_w + 100.0, card_h + 100.0), &shadow);
         if ctx.style.tier.level >= 7 {
-            c.set_shadow_color(p.card_edge.fv());
-            c.set_shadow_blur(22.0);
-            draw::fill_color(c, &card, p.card.fv());
+            let glow = Paint::box_gradient(card_x, card_y, card_w, card_h, 22.0, 22.0, p.card_edge.fv(), p.card_edge.alpha(0.0));
+            c.fill_path(&draw::rect(card_x - 30.0, card_y - 30.0, card_w + 60.0, card_h + 60.0), &glow);
         }
-        c.set_shadow_color(Color::rgbaf(0.0, 0.0, 0.0, 0.0));
-        c.set_shadow_blur(0.0);
+        draw::fill_color(c, &card, p.card.fv());
         draw::stroke(c, &round_rect(card_x + 1.5, card_y + 1.5, card_w - 3.0, card_h - 3.0, 20.5), p.card_edge.fv(), 3.0);
 
         // Hits are recorded topmost first: card contents, the card, then the backdrop.
@@ -545,11 +550,8 @@ impl Ui {
                 draw::fill_color(c, &round_rect(tx, mid - 3.0, tw, 6.0, 3.0), white(0.25));
                 draw::fill_color(c, &round_rect(tx, mid - 3.0, tw * value, 6.0, 3.0), p.accent.fv());
                 let kx = tx + tw * value;
-                c.set_shadow_color(black(0.35));
-                c.set_shadow_blur(4.0);
+                c.fill_path(&draw::circle(kx, mid + 1.0, 13.0), &draw::radial(kx, mid + 1.0, 9.0, 13.0, &[(0.0, black(0.3)), (1.0, black(0.0))]));
                 draw::fill_color(c, &draw::circle(kx, mid, 10.0), p.accent.fv());
-                c.set_shadow_color(Color::rgbaf(0.0, 0.0, 0.0, 0.0));
-                c.set_shadow_blur(0.0);
                 draw::fill_color(c, &draw::circle(kx, mid, 4.0), white(0.85));
                 self.tracks.push((*key, tx, tw));
                 hits.push(Hit { id: UiId::Slider(*key), x: tx - 14.0, y: ry, w: tw + 28.0, h: 44.0 });

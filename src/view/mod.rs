@@ -5,6 +5,7 @@ pub mod draw;
 pub mod renderer;
 pub mod scene;
 pub mod text;
+pub mod text_cache;
 pub mod ui;
 
 use femtovg::{ImageFlags, ImageId, ImageSource, renderer::OpenGl};

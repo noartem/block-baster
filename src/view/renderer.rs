@@ -8,6 +8,7 @@ use femtovg::{Align, Color, CompositeOperation, ImageId, LineCap, LineJoin, Pain
 use super::draw::{self, circle, clamp01, ease_out_back, ease_out_cubic, fill_rect, lerp, linear, radial, rect, round_rect};
 use super::scene::*;
 use super::text::{self, Fonts};
+use super::text_cache::TextCache;
 use super::{Canvas, upload};
 use crate::color::{Rgb, black, white};
 use crate::game::board::{SIZE, idx};
@@ -50,6 +51,8 @@ pub struct Renderer {
     sprite_size: f32,
     dpr: f32,
     style: Style,
+    /// Floating texts and banners, rendered once each.
+    texts: TextCache,
 }
 
 impl Renderer {
@@ -62,6 +65,7 @@ impl Renderer {
             sprite_size: 1.0,
             dpr: 1.0,
             style,
+            texts: TextCache::default(),
         }
     }
 
@@ -78,6 +82,7 @@ impl Renderer {
         if let Some((_, id)) = self.board.take() {
             c.delete_image(id);
         }
+        self.texts.clear(c);
     }
 
     /// True while any time-based effect still needs frames.
@@ -155,6 +160,7 @@ impl Renderer {
         self.sprite_size = layout.cell;
 
         Self::expire(scene);
+        self.texts.begin_frame(c);
 
         c.save();
         if let Some(shake) = &scene.shake {
@@ -784,45 +790,61 @@ impl Renderer {
                 scale *= 1.0 + 0.12 * w;
                 tilt = 0.06 * w;
             }
-            c.save();
-            c.set_global_alpha(alpha.max(0.0));
             // Scale the text down if it would not fit the screen in this style's font.
-            let mut fill = text::paint(&fonts, ft.size, Align::Center, ft.color.fv());
+            let fill = text::paint(&fonts, ft.size, Align::Center, ft.color.fv());
             let text_width = text::width(c, &ft.text, &fill).max(1.0);
             let fit = (scene.layout.width * 0.92 / text_width).min(1.0);
             // Popups near the screen edges move in so they stay readable.
             let half = text_width * fit / 2.0 + ft.size * 0.15;
             let x = if ft.banner { ft.x } else { ft.x.min(scene.layout.width - half).max(half) };
+            c.save();
             c.translate(x, ft.y + dy);
             if tilt != 0.0 {
                 c.rotate(tilt);
             }
-            c.scale(scale.max(0.01), scale.max(0.01));
-            if fit < 1.0 {
-                c.scale(fit, fit);
-            }
+            c.scale(scale.max(0.01) * fit, scale.max(0.01) * fit);
+            let glow = tier.text_glow;
+            let gradient = tier.text_gradient && ft.banner;
+            let key = format!("{}|{}|{}|{}|{}", ft.text, scene.style.key(), ft.size, ft.color.to_hex(), gradient);
+            let size = ft.size;
+            let label = ft.text.as_str();
+            let color = ft.color;
             let mut outline = fill.clone();
             outline.set_color(palette.board_edge.alpha(0.9));
-            outline.set_line_width((ft.size * 0.14).max(3.0));
+            outline.set_line_width((size * 0.14).max(3.0));
             outline.set_line_join(LineJoin::Round);
-            if tier.text_glow {
-                c.set_shadow_color(palette.glow.fv());
-                c.set_shadow_blur(ft.size * 0.45);
+            let (w, h) = (text_width + size * 0.5, size * 2.0);
+            if glow {
+                // The glow is soft, so a low-resolution texture does; it is blurred by the
+                // original's device pixels (shadowBlur ignores the transform), in logical pixels here.
+                let blur = size * 0.45 / scene.dpr;
+                let pad = blur * 2.0;
+                let outline = outline.clone();
+                self.texts.draw(c, &format!("glow|{key}"), w + pad * 2.0, h + pad * 2.0, 1.0, alpha.max(0.0), |c| {
+                    c.set_shadow_color(palette.glow.fv());
+                    c.set_shadow_blur(blur);
+                    text::stroke(c, 0.0, 0.0, label, &outline);
+                    c.set_shadow_color(Color::rgbaf(0.0, 0.0, 0.0, 0.0));
+                    c.set_shadow_blur(0.0);
+                });
             }
-            text::stroke(c, 0.0, 0.0, &ft.text, &outline);
-            c.set_shadow_color(Color::rgbaf(0.0, 0.0, 0.0, 0.0));
-            c.set_shadow_blur(0.0);
-            if tier.text_gradient && ft.banner {
-                let grad = linear(
-                    0.0,
-                    -ft.size / 2.0,
-                    0.0,
-                    ft.size / 2.0,
-                    &[(0.0, Rgb::hex("#fffbe6").fv()), (0.45, ft.color.fv()), (0.55, ft.color.fv()), (1.0, Rgb::hex("#b07a10").fv())],
-                );
-                fill = text::styled(grad, &fonts, ft.size, Align::Center);
-            }
-            text::fill(c, 0.0, 0.0, &ft.text, &fill);
+            // Crisp outline and fill, a little larger than they ever appear.
+            self.texts.draw(c, &key, w, h, scene.dpr * 1.25, alpha.max(0.0), |c| {
+                text::stroke(c, 0.0, 0.0, label, &outline);
+                let paint = if gradient {
+                    let grad = linear(
+                        0.0,
+                        -size / 2.0,
+                        0.0,
+                        size / 2.0,
+                        &[(0.0, Rgb::hex("#fffbe6").fv()), (0.45, color.fv()), (0.55, color.fv()), (1.0, Rgb::hex("#b07a10").fv())],
+                    );
+                    text::styled(grad, &fonts, size, Align::Center)
+                } else {
+                    fill.clone()
+                };
+                text::fill(c, 0.0, 0.0, label, &paint);
+            });
             c.restore();
         }
     }

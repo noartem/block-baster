@@ -330,6 +330,7 @@ impl App {
             can_vibrate: self.platform.can_vibrate(),
             native: self.platform.is_app(),
             now,
+            dpr: self.scene.dpr,
         };
         let hud = HudInfo {
             best: self.best.max(self.game.score),

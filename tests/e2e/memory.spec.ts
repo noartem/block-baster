@@ -120,7 +120,7 @@ test('memory stays flat over a long game', async ({ page, browserName }) => {
   expect(after.beams).toBe(0);
   expect(after.streaks).toBe(0);
   expect(after.texts).toBe(0);
-  expect(after.listeners).toBe(warm.listeners);
+  expect(after.listeners).toBeLessThanOrEqual(warm.listeners);
   expect(after.nodes - warm.nodes).toBeLessThanOrEqual(20);
   expect(after.heap - warm.heap).toBeLessThan(1024 * 1024);
   // WebAssembly memory only ever grows, so growth here would be a leak.

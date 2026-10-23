@@ -44,6 +44,8 @@ interface BBState {
   overlay: 'none' | 'menu' | 'gameover';
   record: boolean;
   helpOpen: boolean;
+  /** The open card is still popping in. */
+  popping: boolean;
   music: { playing: boolean; bpm: number; e: number; volume: number };
   soundVolume: number;
   stats: { sprites: number; particles: number; rings: number; beams: number; streaks: number; texts: number; animating: boolean; wasmMemory: number };

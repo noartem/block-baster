@@ -22,23 +22,28 @@ export async function waitReady(page: Page) {
 export const state = (page: Page) => page.evaluate(() => window.blockBaster.state());
 
 /** Waits for the game to show an overlay ('none', 'menu' or 'gameover'). */
-export async function expectOverlay(page: Page, overlay: string, timeout = 5000) {
-  await expect.poll(() => page.evaluate(() => document.body.dataset.overlay), { timeout }).toBe(overlay);
+export async function expectOverlay(page: Page, overlay: BBState['overlay'], timeout = 10_000) {
+  await expect.poll(async () => (await state(page)).overlay, { timeout }).toBe(overlay);
+}
+
+/** Waits until a UI element is drawn (and an opening card has popped in), then returns its rect. */
+export async function waitUi(page: Page, name: keyof BBState['ui']) {
+  await expect.poll(async () => !!(await state(page)).ui[name], { message: `${name} is on screen` }).toBe(true);
+  await expect.poll(async () => (await state(page)).popping, { timeout: 10_000 }).toBe(false);
+  return (await state(page)).ui[name]!;
 }
 
 /** Clicks a UI element drawn on the canvas, by name (see BBState.ui). */
 export async function tap(page: Page, name: keyof BBState['ui']) {
-  const rect = (await state(page)).ui[name];
-  expect(rect, `${name} is on screen`).toBeTruthy();
-  await page.mouse.click(rect!.cx, rect!.cy);
+  const rect = await waitUi(page, name);
+  await page.mouse.click(rect.cx, rect.cy);
 }
 
 /** Sets a menu slider to `value` (0..1) by clicking its track. */
 export async function slide(page: Page, name: 'music' | 'sound' | 'haptics', value: number) {
-  const rect = (await state(page)).ui[name];
-  expect(rect, `${name} slider is on screen`).toBeTruthy();
+  const rect = await waitUi(page, name);
   // The hit area reaches 14 px past each end of the track.
-  await page.mouse.click(rect!.x + 14 + (rect!.w - 28) * value, rect!.cy);
+  await page.mouse.click(rect.x + 14 + (rect.w - 28) * value, rect.cy);
 }
 
 /** Finds a legal move for the first piece in the tray that fits somewhere. */

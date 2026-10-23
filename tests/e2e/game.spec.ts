@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { TOUCH_GAIN, expectOverlay, findMove, open, slide, state, tap, waitReady } from './helpers';
+import { TOUCH_GAIN, expectOverlay, findMove, open, slide, state, tap, waitReady, waitUi } from './helpers';
 
 test('loads without errors and deals three pieces', async ({ page }) => {
   const errors = await open(page);
@@ -79,8 +79,6 @@ test('shows the game over screen and starts a new game', async ({ page }) => {
   let s = await state(page);
   expect(s.score).toBe(1);
   expect(s.record).toBe(true);
-  // Let the card pop in, then press "Play again".
-  await page.waitForTimeout(350);
   await tap(page, 'again');
   await expectOverlay(page, 'none');
   s = await state(page);
@@ -126,7 +124,6 @@ test('music starts on the first touch, speeds up with the score and can be turne
   await expect.poll(async () => (await state(page)).music.bpm, { timeout: 15_000 }).toBeGreaterThan(100);
   await tap(page, 'menuButton');
   await expectOverlay(page, 'menu');
-  await page.waitForTimeout(350);
   await slide(page, 'music', 0);
   let s = await state(page);
   expect(s.settings.music).toBe(0);
@@ -142,7 +139,6 @@ test('menu sliders set the volumes and persist them', async ({ page }) => {
   await open(page);
   await tap(page, 'menuButton');
   await expectOverlay(page, 'menu');
-  await page.waitForTimeout(350);
   let s = await state(page);
   // "Exit" only exists inside the apps.
   expect(s.ui.exit).toBeNull();
@@ -168,7 +164,6 @@ test('the menu closes on Escape and on a tap outside the card', async ({ page })
   await expectOverlay(page, 'none');
   await tap(page, 'menuButton');
   await expectOverlay(page, 'menu');
-  await page.waitForTimeout(350);
   await page.mouse.click(4, 4);
   await expectOverlay(page, 'none');
 });
@@ -176,7 +171,7 @@ test('the menu closes on Escape and on a tap outside the card', async ({ page })
 test('vibration settings only show up on devices that can vibrate', async ({ page, isMobile }) => {
   await open(page);
   await tap(page, 'menuButton');
-  await page.waitForTimeout(350);
+  await waitUi(page, 'resume');
   const s = await state(page);
   if (isMobile) {
     expect(s.ui.haptics).not.toBeNull();
@@ -196,17 +191,16 @@ test('turns the on/off switches of older versions into levels', async ({ page })
 
 test('continues a game saved by the old web version', async ({ page }) => {
   await open(page);
+  // Write the old save from a page of the same site that doesn't run the game (it saves on the way out).
+  await page.goto('/manifest.webmanifest');
   await page.evaluate(() => {
-    // Written as the page goes away, after the game saved its own state.
-    window.addEventListener('pagehide', () => {
-      const board = Array(64).fill(0);
-      board[63] = 3;
-      localStorage.setItem('bb.best', '5000');
-      localStorage.setItem(
-        'bb.game',
-        JSON.stringify({ v: 1, board, tray: [{ id: 'L4-2', color: 5 }, null, { id: 'dot-0', color: 1 }], score: 120, combo: 1, sinceClear: 0, moves: 12, rng: 123456, over: false }),
-      );
-    });
+    const board = Array(64).fill(0);
+    board[63] = 3;
+    localStorage.setItem('bb.best', '5000');
+    localStorage.setItem(
+      'bb.game',
+      JSON.stringify({ v: 1, board, tray: [{ id: 'L4-2', color: 5 }, null, { id: 'dot-0', color: 1 }], score: 120, combo: 1, sinceClear: 0, moves: 12, rng: 123456, over: false }),
+    );
   });
   await page.goto('/');
   await waitReady(page);
