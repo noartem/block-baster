@@ -21,5 +21,8 @@ pub mod desktop;
 #[cfg(target_os = "android")]
 pub mod android;
 
+#[cfg(any(target_os = "android", test))]
+pub mod legacy;
+
 #[cfg(target_arch = "wasm32")]
 pub mod web;

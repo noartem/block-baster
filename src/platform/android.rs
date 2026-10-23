@@ -130,7 +130,15 @@ impl Host for AndroidHost {
 fn android_main(app: AndroidApp) {
     android_logger::init_once(android_logger::Config::default().with_max_level(log::LevelFilter::Info).with_tag("BlockBaster"));
     let dir = app.internal_data_path().unwrap_or_else(|| std::path::PathBuf::from("."));
-    let store = FileStore::open(dir.join("storage.json"));
+    let mut store = FileStore::open(dir.join("storage.json"));
+    // The data directory is `files/`; the WebView of the earlier app kept its data next to it.
+    if let Some(app_dir) = dir.parent() {
+        let empty = store.is_empty();
+        let moved = super::legacy::migrate(&mut store, empty, &app_dir.join(super::legacy::WEBVIEW_STORAGE), &dir.join("legacy-tmp"));
+        if moved > 0 {
+            log::info!("carried over {moved} saved items from the WebView version");
+        }
+    }
     let can_vibrate = with_activity(|env, activity| {
         let vib = vibrator(env, activity)?;
         env.call_method(&vib, "hasVibrator", "()Z", &[])?.z()

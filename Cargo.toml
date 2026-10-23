@@ -35,6 +35,8 @@ tiny-skia = { version = "0.12", default-features = false, features = ["std", "si
 png = "0.18"
 
 [target.'cfg(target_os = "android")'.dependencies]
+# Reads the saves of the earlier WebView-based app once (see src/platform/legacy.rs).
+rusty-leveldb = { version = "4", default-features = false, features = ["fs"] }
 winit = { version = "0.30", default-features = false, features = ["rwh_06", "android-native-activity"] }
 glutin = { version = "0.32", default-features = false, features = ["egl"] }
 glutin-winit = { version = "0.5", default-features = false, features = ["egl"] }
@@ -74,6 +76,9 @@ web-sys = { version = "0.3", features = [
   "WheelEvent",
   "Window",
 ] }
+
+[dev-dependencies]
+rusty-leveldb = { version = "4", default-features = false, features = ["fs"] }
 
 [profile.release]
 opt-level = 3
