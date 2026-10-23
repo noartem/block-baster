@@ -53,15 +53,19 @@ const VIRTUAL_TIME = () => {
   window.webkitAudioContext = undefined;
 };
 
-function serve() {
-  // Detached, so the server can be stopped at the end.
-  const server = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', 'dist'], { cwd: root, stdio: 'pipe', detached: true });
-  return new Promise((ok, fail) => {
-    const ready = (d) => String(d).includes(`${PORT}`) && ok(server);
-    server.stdout.on('data', ready);
-    server.stderr.on('data', ready);
-    server.on('exit', (code) => fail(new Error(`http.server exited with ${code}`)));
-  });
+async function serve() {
+  // Detached, so the server can be stopped at the end. Unbuffered (-u), though readiness is polled anyway.
+  const server = spawn('python3', ['-u', '-m', 'http.server', String(PORT), '--bind', '127.0.0.1', '--directory', 'dist'], { cwd: root, stdio: 'ignore', detached: true });
+  for (let i = 0; i < 100; i++) {
+    try {
+      if ((await fetch(BASE)).ok) return server;
+    } catch {
+      // Not listening yet.
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  process.kill(-server.pid);
+  throw new Error('the web server did not start');
 }
 
 async function openGame(context, query = '?seed=7&reset') {
