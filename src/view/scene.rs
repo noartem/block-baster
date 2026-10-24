@@ -4,14 +4,28 @@
 use std::collections::HashSet;
 
 use crate::color::Rgb;
-use crate::game::board::{Board, Lines, create_board};
+use crate::game::board::{Board, Lines, SIZE, create_board};
 use crate::game::game::Piece;
 use crate::game::generator::TRAY_SIZE;
 use crate::layout::Layout;
+use crate::render::sprites::LOOKS;
 use crate::styles::{ParticleShape, Style, style_for};
+
+/// The look (see [`LOOKS`]) of the `k`-th cell of a piece whose looks were seeded with `seed`.
+/// A block keeps its look from the tray, through the drag, onto the board.
+pub fn piece_look(seed: u32, k: usize) -> u8 {
+    let mut h = seed ^ (k as u32).wrapping_mul(0x9e37_79b9);
+    h ^= h >> 16;
+    h = h.wrapping_mul(0x85eb_ca6b);
+    h ^= h >> 13;
+    h = h.wrapping_mul(0xc2b2_ae35);
+    h ^= h >> 16;
+    (h % LOOKS as u32) as u8
+}
 
 pub struct DragView {
     pub piece: Piece,
+    pub slot: usize,
     /// Top-left of the piece in logical pixels.
     pub x: f32,
     pub y: f32,
@@ -33,6 +47,7 @@ pub struct ClearingCell {
     pub r: usize,
     pub c: usize,
     pub color: u8,
+    pub look: u8,
     pub delay: f64,
 }
 
@@ -42,8 +57,8 @@ pub struct ClearingCell {
 pub enum ParticleKind {
     Plain,
     Dust,
-    /// Debris drawn as a block of this colour id.
-    Block(u8),
+    /// Debris drawn as a block of this colour id and look.
+    Block(u8, u8),
     Confetti,
     Mote,
 }
@@ -157,7 +172,11 @@ pub struct Scene {
     /// Start of the shimmer that sweeps the board when the style changes.
     pub style_wave_at: Option<f64>,
     pub board: Board,
+    /// The look of the block in each board cell.
+    pub looks: [u8; SIZE * SIZE],
     pub tray: [Option<Piece>; TRAY_SIZE],
+    /// Seeds of the looks of the pieces in the tray (see [`piece_look`]).
+    pub tray_looks: [u32; TRAY_SIZE],
     /// The tray is a lucky one (see is_lucky_deal) and glows softly.
     pub lucky: bool,
     pub playable: [bool; TRAY_SIZE],
@@ -190,7 +209,10 @@ impl Scene {
             style: style_for(0, 0),
             style_wave_at: None,
             board: create_board(),
+            // A saved game doesn't keep looks; mix them up by position.
+            looks: std::array::from_fn(|i| piece_look(0x5eed_b10c, i)),
             tray: [None; TRAY_SIZE],
+            tray_looks: [0; TRAY_SIZE],
             lucky: false,
             playable: [false; TRAY_SIZE],
             hidden_slot: None,

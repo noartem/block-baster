@@ -17,7 +17,7 @@ mod desktop {
 
     use block_baster::game::board::SIZE;
     use block_baster::render::board::board_background;
-    use block_baster::render::sprites::block_sprite;
+    use block_baster::render::sprites::{LOOKS, block_sprite};
     use block_baster::styles::{Style, TIERS, color_for};
     use tiny_skia::{Color, Pixmap, PixmapPaint, Transform};
 
@@ -64,7 +64,7 @@ mod desktop {
             let mut x = GAP;
             for &px in &sizes {
                 for id in [1u8, 2, 3, 4, 5, 6, 7, 0] {
-                    let sprite = block_sprite(tier.block, color_for(id, palette), px);
+                    let sprite = block_sprite(tier.block, color_for(id, palette), px, 0);
                     blit(
                         &mut sheet,
                         &sprite,
@@ -77,6 +77,26 @@ mod desktop {
             }
         }
         sheet.save_png(out.join("sprites.png")).unwrap();
+
+        // Looks: per tier, every look of four colours at 96 px, in board order.
+        let px = 96u32;
+        let per = LOOKS as u32 * px + GAP * 2;
+        let mut looks = Pixmap::new(GAP + 4 * per, (px + GAP * 2) * TIERS.len() as u32).unwrap();
+        for (i, tier) in TIERS.iter().enumerate() {
+            let palette = &tier.variants[0];
+            let b = palette.board;
+            let row = tiny_skia::Rect::from_xywh(0.0, (i as u32 * (px + GAP * 2)) as f32, looks.width() as f32, (px + GAP * 2) as f32).unwrap();
+            let mut paint = tiny_skia::Paint::default();
+            paint.set_color(Color::from_rgba8(b.r, b.g, b.b, 255));
+            looks.fill_rect(row, &paint, Transform::identity(), None);
+            for (k, id) in [1u8, 2, 3, 5].into_iter().enumerate() {
+                for look in 0..LOOKS {
+                    let sprite = block_sprite(tier.block, color_for(id, palette), px, look);
+                    blit(&mut looks, &sprite, GAP + k as u32 * per + look as u32 * px, i as u32 * (px + GAP * 2) + GAP);
+                }
+            }
+        }
+        looks.save_png(out.join("looks.png")).unwrap();
 
         // Board backgrounds: one image per tier with its three variants side by side.
         let arg = |i: usize, default: f32| {
@@ -120,7 +140,7 @@ mod desktop {
         for tier in TIERS.iter() {
             let t = Instant::now();
             for _ in 0..runs {
-                block_sprite(tier.block, color_for(1, &tier.variants[0]), 150);
+                block_sprite(tier.block, color_for(1, &tier.variants[0]), 150, 0);
             }
             println!(
                 "sprite {:?} 150px: {:.2} ms",

@@ -9,23 +9,28 @@ use super::skia::{Ctx, alpha, black, linear, radial, rgba, white};
 use crate::color::Rgb;
 use crate::styles::BlockKind;
 
-/// Renders one block of the given look and colour into a `px`×`px` pixmap
-/// (premultiplied RGBA).
-pub fn block_sprite(kind: BlockKind, base: Rgb, px: u32) -> Pixmap {
+/// How many slightly different blocks each style has per colour, so a board
+/// full of one colour doesn't look stamped out. Look 0 is the reference look.
+pub const LOOKS: u8 = 4;
+
+/// Renders one block of the given style, colour and look (`0..LOOKS`) into a
+/// `px`×`px` pixmap (premultiplied RGBA).
+pub fn block_sprite(kind: BlockKind, base: Rgb, px: u32, look: u8) -> Pixmap {
     let px = px.max(1);
     let mut ctx = Ctx::new(px, px);
     let s = px as f32;
+    let v = (look % LOOKS) as usize;
     match kind {
-        BlockKind::Jewel => jewel(&mut ctx, base, s),
-        BlockKind::Cardboard => cardboard(&mut ctx, base, s),
-        BlockKind::Candy => candy(&mut ctx, base, s),
-        BlockKind::Gingerbread => gingerbread(&mut ctx, base, s),
-        BlockKind::Wood => wood(&mut ctx, base, s),
-        BlockKind::Gem => gem(&mut ctx, base, s),
-        BlockKind::Iron => iron(&mut ctx, base, s),
-        BlockKind::Neon => neon(&mut ctx, base, s),
-        BlockKind::Glass => glass(&mut ctx, base, s),
-        BlockKind::Royal => royal(&mut ctx, base, s),
+        BlockKind::Jewel => jewel(&mut ctx, base, s, v),
+        BlockKind::Cardboard => cardboard(&mut ctx, base, s, v),
+        BlockKind::Candy => candy(&mut ctx, base, s, v),
+        BlockKind::Gingerbread => gingerbread(&mut ctx, base, s, v),
+        BlockKind::Wood => wood(&mut ctx, base, s, v),
+        BlockKind::Gem => gem(&mut ctx, base, s, v),
+        BlockKind::Iron => iron(&mut ctx, base, s, v),
+        BlockKind::Neon => neon(&mut ctx, base, s, v),
+        BlockKind::Glass => glass(&mut ctx, base, s, v),
+        BlockKind::Royal => royal(&mut ctx, base, s, v),
     }
     ctx.into_pixmap()
 }
@@ -154,7 +159,7 @@ fn inner_outline(ctx: &mut Ctx, x: f32, w: f32, radius: f32, color: Rgb) {
 }
 
 /// Classic: a bevelled square with a light top-left edge, dark bottom-right edge and a soft glossy face.
-fn jewel(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn jewel(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.03).max(1.0);
     let x0 = gap;
     let x1 = s - gap;
@@ -174,30 +179,53 @@ fn jewel(ctx: &mut Ctx, base: Rgb, s: f32) {
     ctx.poly(&[x1, x0, x1, x1, i1, i1, i1, i0], base.shade(-0.18)); // right
     ctx.poly(&[x0, x1, i0, i1, i1, i1, x1, x1], base.shade(-0.32)); // bottom
 
+    // Each block catches the light a little differently.
+    let (top, bottom) = [(0.12, -0.06), (0.16, -0.04), (0.1, -0.1), (0.14, -0.08)][v];
     let face = linear(
         0.0,
         i0,
         0.0,
         i1,
         &[
-            (0.0, alpha(base.shade(0.12), 1.0)),
-            (1.0, alpha(base.shade(-0.06), 1.0)),
+            (0.0, alpha(base.shade(top), 1.0)),
+            (1.0, alpha(base.shade(bottom), 1.0)),
         ],
     );
     ctx.fill_rect(i0, i0, i1 - i0, i1 - i0, face);
 
     // Glossy highlight in the upper-left of the face.
-    let (gx, gy) = (i0 + s * 0.12, i0 + s * 0.1);
+    let (gx, gy, gr) = [(0.12, 0.1, 0.32), (0.2, 0.07, 0.27), (0.07, 0.17, 0.36), (0.15, 0.12, 0.24)][v];
+    let (gx, gy) = (i0 + s * gx, i0 + s * gy);
     let gloss = radial(
         gx,
         gy,
         0.0,
         gx,
         gy,
-        s * 0.32,
+        s * gr,
         &[(0.0, white(0.45)), (1.0, white(0.0))],
     );
     ctx.fill_rect(i0, i0, i1 - i0, i1 - i0, gloss);
+    match v {
+        // A small reflection in the lower-right corner.
+        1 => {
+            ctx.begin_path();
+            ctx.circle(i1 - s * 0.09, i1 - s * 0.09, s * 0.035);
+            ctx.fill(white(0.3));
+        }
+        // A faint diagonal streak across the face.
+        2 => ctx.poly(
+            &[i0, i1 - s * 0.12, i1 - s * 0.12, i0, i1 - s * 0.04, i0, i0, i1 - s * 0.04],
+            white(0.1),
+        ),
+        // A thin inner ring.
+        3 => {
+            ctx.set_line_width((s * 0.012).max(0.5));
+            ctx.round_rect(i0 + s * 0.04, i0 + s * 0.04, i1 - i0 - s * 0.08, i1 - i0 - s * 0.08, s * 0.05);
+            ctx.stroke(white(0.16));
+        }
+        _ => {}
+    }
     ctx.restore();
 
     ctx.set_line_width((s * 0.025).max(1.0));
@@ -205,7 +233,7 @@ fn jewel(ctx: &mut Ctx, base: Rgb, s: f32) {
 }
 
 /// Candy: a rounded, glossy jelly sweet with a big shine on top.
-fn candy(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn candy(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.04).max(1.0);
     let w = s - gap * 2.0;
     let radius = s * 0.26;
@@ -238,13 +266,44 @@ fn candy(ctx: &mut Ctx, base: Rgb, s: f32) {
     );
     ctx.fill_rect(0.0, 0.0, s, s, inner);
 
+    match v {
+        // Diagonal stripes, like a pulled sugar sweet.
+        1 => {
+            for i in -2..3 {
+                let o = i as f32 * s * 0.34;
+                ctx.poly(&[o, s, o + s * 0.13, s, o + s * 1.13, 0.0, o + s, 0.0], white(0.15));
+            }
+        }
+        // Sugar crystals sprinkled over the bottom half.
+        2 => {
+            let mut rand = seed(base, 0x5ca7);
+            for _ in 0..9 {
+                let (x, y) = (s * (0.18 + rand.f() * 0.64), s * (0.48 + rand.f() * 0.36));
+                let r = s * (0.018 + rand.f() * 0.014);
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(rand.f() * PI);
+                ctx.fill_rect(-r, -r, r * 2.0, r * 2.0, white(0.55));
+                ctx.restore();
+            }
+        }
+        // A soft glint low on the right.
+        3 => {
+            ctx.begin_path();
+            ctx.ellipse(s * 0.7, s * 0.74, s * 0.08, s * 0.05, -0.6, 0.0, TAU, false);
+            ctx.fill(white(0.28));
+        }
+        _ => {}
+    }
+
     // Big shine across the top half.
+    let (sx, sw, tilt) = [(0.5, 0.34, 0.0), (0.46, 0.3, -0.12), (0.52, 0.32, 0.08), (0.42, 0.26, -0.3)][v];
     ctx.begin_path();
-    ctx.ellipse(s * 0.5, s * 0.27, s * 0.34, s * 0.15, 0.0, 0.0, TAU, false);
+    ctx.ellipse(s * sx, s * 0.27, s * sw, s * 0.15, tilt, 0.0, TAU, false);
     ctx.fill(white(0.5));
     ctx.begin_path();
     ctx.ellipse(
-        s * 0.3,
+        s * (sx - sw * 0.6),
         s * 0.26,
         s * 0.07,
         s * 0.045,
@@ -261,12 +320,14 @@ fn candy(ctx: &mut Ctx, base: Rgb, s: f32) {
 }
 
 /// Gems: a cut stone with eight facets around an octagonal table and a sparkle.
-fn gem(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn gem(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let a = (s * 0.03).max(1.0);
     let b = s - a;
-    let t0 = s * 0.22;
+    // Every stone is cut a little differently.
+    let (table, cut) = [(0.22, 0.1), (0.19, 0.08), (0.25, 0.1), (0.21, 0.12)][v];
+    let t0 = s * table;
     let t1 = s - t0;
-    let k = s * 0.1; // corner cut of the table
+    let k = s * cut; // corner cut of the table
     let radius = s * 0.08;
 
     ctx.save();
@@ -324,11 +385,15 @@ fn gem(ctx: &mut Ctx, base: Rgb, s: f32) {
 
     ctx.set_line_width((s * 0.025).max(1.0));
     inner_outline(ctx, a, b - a, radius, base.shade(-0.55));
-    sparkle(ctx, s * 0.3, s * 0.3, s * 0.16, 0.95);
+    let (x, y, r) = [(0.3, 0.3, 0.16), (0.7, 0.29, 0.13), (0.31, 0.68, 0.12), (0.28, 0.31, 0.14)][v];
+    sparkle(ctx, s * x, s * y, s * r, 0.95);
+    if v == 3 {
+        sparkle(ctx, s * 0.71, s * 0.7, s * 0.07, 0.8);
+    }
 }
 
 /// Neon: a dark tile outlined by a glowing tube.
-fn neon(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn neon(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let pad = s * 0.12;
     let w = s - pad * 2.0;
     let radius = s * 0.14;
@@ -351,14 +416,29 @@ fn neon(ctx: &mut Ctx, base: Rgb, s: f32) {
     // Hot white core of the tube.
     ctx.set_line_width((s * 0.025).max(1.0));
     ctx.stroke(base.shade(0.65));
-    // Small inner square for depth.
+    // A small inner sign for depth: square, dot, diamond or a second tube.
     let ip = s * 0.34;
-    ctx.round_rect(ip, ip, s - ip * 2.0, s - ip * 2.0, s * 0.06);
-    ctx.fill(alpha(base, 0.35));
+    match v {
+        1 => {
+            ctx.begin_path();
+            ctx.circle(s / 2.0, s / 2.0, s * 0.15);
+            ctx.fill(alpha(base, 0.35));
+        }
+        2 => ctx.poly(&[s / 2.0, s * 0.31, s * 0.69, s / 2.0, s / 2.0, s * 0.69, s * 0.31, s / 2.0], alpha(base, 0.35)),
+        3 => {
+            ctx.set_line_width((s * 0.03).max(1.0));
+            ctx.round_rect(ip, ip, s - ip * 2.0, s - ip * 2.0, s * 0.06);
+            ctx.stroke(alpha(base.shade(0.3), 0.6));
+        }
+        _ => {
+            ctx.round_rect(ip, ip, s - ip * 2.0, s - ip * 2.0, s * 0.06);
+            ctx.fill(alpha(base, 0.35));
+        }
+    }
 }
 
 /// Aurora: a translucent glass tile with a bright rim and a diagonal reflection.
-fn glass(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn glass(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.04).max(1.0);
     let w = s - gap * 2.0;
     let radius = s * 0.18;
@@ -389,15 +469,27 @@ fn glass(ctx: &mut Ctx, base: Rgb, s: f32) {
         &[(0.0, white(0.4)), (1.0, white(0.0))],
     );
     ctx.fill_rect(0.0, 0.0, s, s, core);
-    // Diagonal reflection bands.
+    // Diagonal reflection bands, never quite in the same place.
+    let [a0, a1, b0, b1] = [[0.55, 0.75, 0.88, 0.94], [0.42, 0.6, 0.74, 0.8], [0.66, 0.84, 1.0, 1.06], [0.5, 0.64, 0.82, 0.98]][v];
     ctx.poly(
-        &[0.0, s * 0.55, s * 0.55, 0.0, s * 0.75, 0.0, 0.0, s * 0.75],
+        &[0.0, s * a0, s * a0, 0.0, s * a1, 0.0, 0.0, s * a1],
         white(0.28),
     );
     ctx.poly(
-        &[0.0, s * 0.88, s * 0.88, 0.0, s * 0.94, 0.0, 0.0, s * 0.94],
+        &[0.0, s * b0, s * b0, 0.0, s * b1, 0.0, 0.0, s * b1],
         white(0.18),
     );
+    // Tiny air bubbles trapped in the glass.
+    if v == 2 || v == 3 {
+        let mut rand = seed(base, 0xb0b ^ v as u32);
+        ctx.set_line_width((s * 0.01).max(0.5));
+        for _ in 0..3 {
+            let (x, y) = (s * (0.25 + rand.f() * 0.5), s * (0.45 + rand.f() * 0.35));
+            ctx.begin_path();
+            ctx.circle(x, y, s * (0.02 + rand.f() * 0.02));
+            ctx.stroke(white(0.45));
+        }
+    }
     ctx.restore();
 
     ctx.set_line_width((s * 0.05).max(1.0));
@@ -415,11 +507,12 @@ fn glass(ctx: &mut Ctx, base: Rgb, s: f32) {
     let h = ctx.line_width() / 2.0;
     ctx.round_rect(gap + h, gap + h, w - h * 2.0, w - h * 2.0, radius);
     ctx.stroke(rim);
-    sparkle(ctx, s * 0.27, s * 0.27, s * 0.12, 0.9);
+    let (x, y) = [(0.27, 0.27), (0.72, 0.3), (0.3, 0.7), (0.24, 0.34)][v];
+    sparkle(ctx, s * x, s * y, s * 0.12, 0.9);
 }
 
 /// Legendary: a jewel set in a bevelled gold frame.
-fn royal(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn royal(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.025).max(1.0);
     let w = s - gap * 2.0;
     let radius = s * 0.12;
@@ -454,7 +547,20 @@ fn royal(ctx: &mut Ctx, base: Rgb, s: f32) {
             (1.0, alpha(base.shade(-0.5), 1.0)),
         ],
     );
-    ctx.round_rect(f, f, fw, fw, s * 0.07);
+    // The jewel is cut as a square, a round cabochon, an octagon or a cushion.
+    match v {
+        1 => {
+            ctx.begin_path();
+            ctx.circle(s / 2.0, s / 2.0, fw / 2.0);
+        }
+        2 => {
+            let c = fw * 0.29;
+            let (a, b) = (f, f + fw);
+            ctx.polygon(&[a + c, a, b - c, a, b, a + c, b, b - c, b - c, b, a + c, b, a, b - c, a, a + c]);
+        }
+        3 => ctx.round_rect(f, f, fw, fw, s * 0.16),
+        _ => ctx.round_rect(f, f, fw, fw, s * 0.07),
+    }
     ctx.fill(face);
     ctx.set_line_width((s * 0.03).max(1.0));
     ctx.stroke("#6b4500");
@@ -471,22 +577,34 @@ fn royal(ctx: &mut Ctx, base: Rgb, s: f32) {
     ctx.set_line_width((s * 0.025).max(1.0));
     ctx.round_rect(gap, gap, w, w, radius);
     ctx.stroke("#5a3a00");
-    sparkle(ctx, s * 0.36, s * 0.34, s * 0.14, 0.95);
+    if v == 3 {
+        // Engraved dots in the corners of the frame.
+        for (x, y) in [(0.085, 0.085), (0.915, 0.085), (0.085, 0.915), (0.915, 0.915)] {
+            ctx.begin_path();
+            ctx.circle(s * x, s * y, s * 0.018);
+            ctx.fill(rgba(90, 58, 0, 0.7));
+        }
+    }
+    let (x, y) = [(0.36, 0.34), (0.38, 0.37), (0.62, 0.35), (0.35, 0.62)][v];
+    sparkle(ctx, s * x, s * y, s * 0.14, 0.95);
 }
 
 /// Cardboard: a matte piece of corrugated kraft board printed in the block colour, with a strip of tape over a corner.
-fn cardboard(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn cardboard(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.035).max(1.0);
     let w = s - gap * 2.0;
     let radius = s * 0.05;
-    let mut rand = seed(base, 0xc0ffee);
+    let mut rand = seed(base, 0xc0ffee ^ (v as u32).wrapping_mul(0x9e37_79b9));
+    // Boxes come from different batches: the ink and the kraft differ a little.
+    let base = base.shade([0.0, -0.035, 0.03, -0.015][v]);
+    let kraft = [0.26, 0.31, 0.22, 0.28][v];
 
     ctx.save();
     ctx.round_rect(gap, gap, w, w, radius);
     ctx.clip();
     // Ink soaked into brown paper: the kraft shows through and dulls it a little.
     ctx.fill_rect(0.0, 0.0, s, s, base);
-    ctx.fill_rect(0.0, 0.0, s, s, rgba(176, 128, 72, 0.26));
+    ctx.fill_rect(0.0, 0.0, s, s, rgba(176, 128, 72, kraft));
     let light = linear(
         0.0,
         0.0,
@@ -499,14 +617,20 @@ fn cardboard(ctx: &mut Ctx, base: Rgb, s: f32) {
     );
     ctx.fill_rect(0.0, 0.0, s, s, light);
 
-    // Flutes of the corrugation pressing through the liner.
-    let flute = s as f64 * 0.1;
-    let mut x = gap as f64 + flute * 0.3;
+    // Flutes of the corrugation pressing through the liner, along or across the piece.
+    let across = v % 2 == 1;
+    let flute = s as f64 * [0.1, 0.11, 0.09, 0.1][v];
+    let mut x = gap as f64 + flute * (0.3 + rand.f() as f64 * 0.4);
     while x < s as f64 {
         let xf = x as f32;
         let fl = flute as f32;
-        ctx.fill_rect(xf, 0.0, fl * 0.42, s, rgba(70, 35, 0, 0.09));
-        ctx.fill_rect(xf + fl * 0.5, 0.0, fl * 0.18, s, rgba(255, 245, 225, 0.07));
+        if across {
+            ctx.fill_rect(0.0, xf, s, fl * 0.42, rgba(70, 35, 0, 0.09));
+            ctx.fill_rect(0.0, xf + fl * 0.5, s, fl * 0.18, rgba(255, 245, 225, 0.07));
+        } else {
+            ctx.fill_rect(xf, 0.0, fl * 0.42, s, rgba(70, 35, 0, 0.09));
+            ctx.fill_rect(xf + fl * 0.5, 0.0, fl * 0.18, s, rgba(255, 245, 225, 0.07));
+        }
         x += flute;
     }
     // Paper fibres.
@@ -527,42 +651,96 @@ fn cardboard(ctx: &mut Ctx, base: Rgb, s: f32) {
         ctx.stroke(color);
     }
 
-    // Printed "this way up" arrows in a darker ink.
+    // Something printed on every box in a darker ink.
     let ink = alpha(base.shade(-0.55), 0.55);
     ctx.set_line_width((s * 0.035).max(1.0));
     ctx.set_line_cap(LineCap::Round);
     ctx.set_line_join(LineJoin::Round);
-    for ax in [s * 0.2, s * 0.33] {
-        ctx.begin_path();
-        ctx.move_to(ax, s * 0.8);
-        ctx.line_to(ax, s * 0.62);
-        ctx.move_to(ax - s * 0.05, s * 0.67);
-        ctx.line_to(ax, s * 0.62);
-        ctx.line_to(ax + s * 0.05, s * 0.67);
-        ctx.stroke(ink);
+    match v {
+        // "This way up" arrows.
+        0 => {
+            for ax in [s * 0.2, s * 0.33] {
+                ctx.begin_path();
+                ctx.move_to(ax, s * 0.8);
+                ctx.line_to(ax, s * 0.62);
+                ctx.move_to(ax - s * 0.05, s * 0.67);
+                ctx.line_to(ax, s * 0.62);
+                ctx.line_to(ax + s * 0.05, s * 0.67);
+                ctx.stroke(ink);
+            }
+            ctx.begin_path();
+            ctx.move_to(s * 0.13, s * 0.85);
+            ctx.line_to(s * 0.4, s * 0.85);
+            ctx.stroke(ink);
+        }
+        // "Fragile": a wine glass.
+        1 => {
+            let (gx, gy) = (s * 0.74, s * 0.66);
+            ctx.begin_path();
+            ctx.move_to(gx - s * 0.07, gy - s * 0.1);
+            ctx.line_to(gx + s * 0.07, gy - s * 0.1);
+            ctx.quad_to(gx + s * 0.07, gy + s * 0.03, gx, gy + s * 0.03);
+            ctx.quad_to(gx - s * 0.07, gy + s * 0.03, gx - s * 0.07, gy - s * 0.1);
+            ctx.move_to(gx, gy + s * 0.03);
+            ctx.line_to(gx, gy + s * 0.15);
+            ctx.move_to(gx - s * 0.05, gy + s * 0.15);
+            ctx.line_to(gx + s * 0.05, gy + s * 0.15);
+            ctx.stroke(ink);
+        }
+        // A round shipping stamp, slightly askew.
+        2 => {
+            ctx.save();
+            ctx.translate(s * 0.3, s * 0.3);
+            ctx.rotate(-0.3);
+            ctx.set_line_width((s * 0.025).max(1.0));
+            ctx.begin_path();
+            ctx.circle(0.0, 0.0, s * 0.15);
+            ctx.stroke(ink);
+            ctx.set_line_width((s * 0.015).max(0.7));
+            ctx.begin_path();
+            ctx.circle(0.0, 0.0, s * 0.1);
+            ctx.stroke(ink);
+            ctx.fill_rect(-s * 0.06, -s * 0.012, s * 0.12, s * 0.024, ink);
+            ctx.restore();
+        }
+        // A barcode label and a hand hole.
+        _ => {
+            ctx.fill_rect(s * 0.52, s * 0.66, s * 0.32, s * 0.2, rgba(250, 244, 230, 0.7));
+            let mut bx = s * 0.55;
+            while bx < s * 0.8 {
+                let bw = s * (0.008 + rand.f() * 0.02);
+                ctx.fill_rect(bx, s * 0.69, bw, s * 0.14, rgba(40, 25, 10, 0.75));
+                bx += bw + s * (0.01 + rand.f() * 0.015);
+            }
+            ctx.round_rect(s * 0.32, s * 0.16, s * 0.36, s * 0.11, s * 0.055);
+            ctx.fill(rgba(40, 18, 0, 0.55));
+            ctx.round_rect(s * 0.32, s * 0.16, s * 0.36, s * 0.035, s * 0.0175);
+            ctx.fill(rgba(20, 8, 0, 0.35));
+        }
     }
-    ctx.begin_path();
-    ctx.move_to(s * 0.13, s * 0.85);
-    ctx.line_to(s * 0.4, s * 0.85);
-    ctx.stroke(ink);
 
-    // A strip of packing tape across the top-right corner.
-    ctx.save();
-    ctx.translate(s * 0.8, s * 0.2);
-    ctx.rotate(PI / 4.0);
-    let tw = s * 0.62;
-    let th = s * 0.2;
-    ctx.fill_rect(-tw / 2.0, -th / 2.0, tw, th, rgba(246, 228, 186, 0.72));
-    ctx.fill_rect(-tw / 2.0, -th / 2.0, tw, th * 0.28, white(0.32));
-    let edge = (s * 0.015).max(0.5);
-    ctx.fill_rect(
-        -tw / 2.0,
-        th / 2.0 - edge,
-        tw,
-        edge,
-        rgba(120, 80, 30, 0.25),
-    );
-    ctx.restore();
+    // Packing tape: over a corner, across the middle, over another corner, or none.
+    let tape = |ctx: &mut Ctx, x: f32, y: f32, angle: f32, tw: f32| {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        let th = s * 0.2;
+        ctx.fill_rect(-tw / 2.0, -th / 2.0, tw, th, rgba(246, 228, 186, 0.72));
+        ctx.fill_rect(-tw / 2.0, -th / 2.0, tw, th * 0.28, white(0.32));
+        let edge = (s * 0.015).max(0.5);
+        ctx.fill_rect(-tw / 2.0, th / 2.0 - edge, tw, edge, rgba(120, 80, 30, 0.25));
+        ctx.restore();
+    };
+    match v {
+        0 => tape(ctx, s * 0.8, s * 0.2, PI / 4.0, s * 0.62),
+        1 => tape(ctx, s * 0.5, s * 0.36, -0.04, s * 1.2),
+        2 => tape(ctx, s * 0.8, s * 0.8, -PI / 4.0, s * 0.62),
+        _ => {
+            // A crease where the board was folded once.
+            ctx.fill_rect(0.0, s * 0.44, s, (s * 0.012).max(0.5), rgba(70, 35, 0, 0.18));
+            ctx.fill_rect(0.0, s * 0.44 + (s * 0.012).max(0.5), s, (s * 0.01).max(0.5), rgba(255, 240, 215, 0.16));
+        }
+    }
     ctx.restore();
 
     // Crisp cut edge: light on top and left, darker all round.
@@ -578,18 +756,20 @@ fn cardboard(ctx: &mut Ctx, base: Rgb, s: f32) {
 }
 
 /// Gingerbread: a baked cookie with a coloured glaze, white piped icing around it and a sugar pearl.
-fn gingerbread(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn gingerbread(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.03).max(1.0);
     let w = s - gap * 2.0;
     let radius = s * 0.2;
-    let mut rand = seed(base, 0x6b1d);
+    let mut rand = seed(base, 0x6b1d ^ (v as u32).wrapping_mul(0x9e37_79b9));
+    // Some cookies came out of the oven a little darker.
+    let (bx, by) = [(0.38, 0.32), (0.44, 0.36), (0.34, 0.4), (0.4, 0.3)][v];
 
     ctx.save();
     ctx.round_rect(gap, gap, w, w, radius);
     ctx.clip();
     let dough = radial(
-        s * 0.38,
-        s * 0.32,
+        s * bx,
+        s * by,
         s * 0.05,
         s / 2.0,
         s / 2.0,
@@ -601,6 +781,9 @@ fn gingerbread(ctx: &mut Ctx, base: Rgb, s: f32) {
         ],
     );
     ctx.fill_rect(0.0, 0.0, s, s, dough);
+    if v == 2 {
+        ctx.fill_rect(0.0, 0.0, s, s, rgba(90, 40, 10, 0.14));
+    }
     // Baked freckles and spice specks.
     for _ in 0..16 {
         let color = if rand.next() < 0.7 {
@@ -674,10 +857,34 @@ fn gingerbread(ctx: &mut Ctx, base: Rgb, s: f32) {
     ctx.stroke("#fffaf2");
     ctx.restore();
 
-    // A sugar pearl on the glaze.
-    let px = s * 0.66;
-    let py = s * 0.64;
-    let pr = s * 0.065;
+    // Decorations on the glaze: a sugar pearl here or there, a row of pearls or an icing zigzag.
+    match v {
+        1 => pearl(ctx, s * 0.36, s * 0.38, s * 0.065),
+        2 => {
+            for i in 0..3 {
+                let k = i as f32;
+                pearl(ctx, s * (0.36 + k * 0.14), s * (0.36 + k * 0.14), s * 0.045);
+            }
+        }
+        3 => {
+            ctx.set_line_width((s * 0.035).max(1.0));
+            ctx.begin_path();
+            ctx.move_to(s * 0.3, s * 0.42);
+            for i in 1..=4 {
+                let k = i as f32;
+                ctx.line_to(s * (0.3 + k * 0.1), s * if i % 2 == 1 { 0.58 } else { 0.42 });
+            }
+            ctx.stroke(rgba(255, 250, 242, 0.92));
+        }
+        _ => pearl(ctx, s * 0.66, s * 0.64, s * 0.065),
+    }
+
+    ctx.set_line_width((s * 0.03).max(1.0));
+    inner_outline(ctx, gap, w, radius, Rgb::hex("#5a2a0c"));
+}
+
+/// A white sugar pearl with a soft shadow.
+fn pearl(ctx: &mut Ctx, px: f32, py: f32, pr: f32) {
     let pearl = radial(
         px - pr * 0.35,
         py - pr * 0.4,
@@ -697,22 +904,28 @@ fn gingerbread(ctx: &mut Ctx, base: Rgb, s: f32) {
     ctx.begin_path();
     ctx.arc(px, py, pr, 0.0, TAU, false);
     ctx.fill(pearl);
-
-    ctx.set_line_width((s * 0.03).max(1.0));
-    inner_outline(ctx, gap, w, radius, Rgb::hex("#5a2a0c"));
 }
 
 /// Wooden: two stained planks with flowing grain, a knot and a satin varnish.
-fn wood(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn wood(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.03).max(1.0);
     let w = s - gap * 2.0;
     let radius = s * 0.07;
-    let mut rand = seed(base, 0x0a4);
+    // Every block is cut from another part of the board: its own grain and knot,
+    // and the planks run across or along it.
+    let mut rand = seed(base, 0x0a4 ^ (v as u32).wrapping_mul(0x9e37_79b9));
+    let base = base.shade([0.0, 0.03, -0.03, 0.015][v]);
 
     ctx.save();
     ctx.round_rect(gap, gap, w, w, radius);
     ctx.clip();
     ctx.fill_rect(0.0, 0.0, s, s, base.shade(0.08));
+    ctx.save();
+    if v % 2 == 1 {
+        ctx.translate(s / 2.0, s / 2.0);
+        ctx.rotate(PI / 2.0);
+        ctx.translate(-s / 2.0, -s / 2.0);
+    }
 
     // The stain soaks into the wood: multiply light and dark wood tones over the colour.
     ctx.set_blend(BlendMode::Multiply);
@@ -731,7 +944,7 @@ fn wood(ctx: &mut Ctx, base: Rgb, s: f32) {
     let half = s / 2.0;
     // A knot on one of the planks; the grain flows around it.
     let kx = s * (0.3 + rand.f() * 0.4);
-    let knot_plank = if rand.next() < 0.5 { 0 } else { 1 };
+    let knot_plank = if v == 3 { 2 } else if rand.next() < 0.5 { 0 } else { 1 };
     let ky = (knot_plank as f32 + 0.5) * half;
     for plank in 0..2 {
         let y0 = plank as f32 * half;
@@ -797,16 +1010,18 @@ fn wood(ctx: &mut Ctx, base: Rgb, s: f32) {
             ctx.stroke(color);
         }
     }
-    for i in (1..=3).rev() {
-        let i = i as f32;
-        ctx.set_line_width((s * 0.014).max(0.6));
+    if knot_plank < 2 {
+        for i in (1..=3).rev() {
+            let i = i as f32;
+            ctx.set_line_width((s * 0.014).max(0.6));
+            ctx.begin_path();
+            ctx.ellipse(kx, ky, s * 0.045 * i, s * 0.022 * i, 0.0, 0.0, TAU, false);
+            ctx.stroke(rgba(80, 38, 8, 0.22 + 0.1 * (3.0 - i)));
+        }
         ctx.begin_path();
-        ctx.ellipse(kx, ky, s * 0.045 * i, s * 0.022 * i, 0.0, 0.0, TAU, false);
-        ctx.stroke(rgba(80, 38, 8, 0.22 + 0.1 * (3.0 - i)));
+        ctx.ellipse(kx, ky, s * 0.03, s * 0.014, 0.0, 0.0, TAU, false);
+        ctx.fill(rgba(70, 30, 5, 0.55));
     }
-    ctx.begin_path();
-    ctx.ellipse(kx, ky, s * 0.03, s * 0.014, 0.0, 0.0, TAU, false);
-    ctx.fill(rgba(70, 30, 5, 0.55));
     ctx.set_blend(BlendMode::SourceOver);
 
     // Seam between the planks.
@@ -824,6 +1039,7 @@ fn wood(ctx: &mut Ctx, base: Rgb, s: f32) {
         (s * 0.012).max(0.5),
         rgba(255, 240, 215, 0.25),
     );
+    ctx.restore();
     // Satin varnish sheen.
     let sheen = linear(
         0.0,
@@ -881,13 +1097,14 @@ pub fn rivet(ctx: &mut Ctx, x: f32, y: f32, r: f32) {
 }
 
 /// Iron: a painted, brushed metal plate with a hard bevel and a rivet in each corner.
-fn iron(ctx: &mut Ctx, base: Rgb, s: f32) {
+fn iron(ctx: &mut Ctx, base: Rgb, s: f32, v: usize) {
     let gap = (s * 0.025).max(1.0);
     let x0 = gap;
     let x1 = s - gap;
     let radius = s * 0.06;
     let bevel = s * 0.1;
-    let mut rand = seed(base, 0x1e0);
+    let mut rand = seed(base, 0x1e0 ^ (v as u32).wrapping_mul(0x9e37_79b9));
+    let base = base.shade([0.0, -0.03, 0.025, -0.015][v]);
 
     ctx.save();
     ctx.round_rect(x0, x0, x1 - x0, x1 - x0, radius);
@@ -953,8 +1170,57 @@ fn iron(ctx: &mut Ctx, base: Rgb, s: f32) {
     );
 
     let rv = s * 0.215;
-    for (x, y) in [(rv, rv), (s - rv, rv), (rv, s - rv), (s - rv, s - rv)] {
-        rivet(ctx, x, y, s * 0.055);
+    let corners = [(rv, rv), (s - rv, rv), (rv, s - rv), (s - rv, s - rv)];
+    match v {
+        // Two rivets and a scratch across the paint.
+        1 => {
+            ctx.set_line_width((s * 0.012).max(0.5));
+            ctx.begin_path();
+            ctx.move_to(s * 0.36, s * 0.62);
+            ctx.line_to(s * 0.66, s * 0.42);
+            ctx.stroke(white(0.35));
+            ctx.begin_path();
+            ctx.move_to(s * 0.36, s * 0.62 + s * 0.012);
+            ctx.line_to(s * 0.66, s * 0.42 + s * 0.012);
+            ctx.stroke(black(0.3));
+            for i in [0, 3] {
+                rivet(ctx, corners[i].0, corners[i].1, s * 0.055);
+            }
+        }
+        // Tread plate: raised diagonal bars between two rivets.
+        3 => {
+            for row in 0..3 {
+                for col in 0..3 {
+                    ctx.save();
+                    ctx.translate(s * (0.33 + col as f32 * 0.17), s * (0.33 + row as f32 * 0.17));
+                    ctx.rotate(if (row + col) % 2 == 0 { PI / 4.0 } else { -PI / 4.0 });
+                    ctx.round_rect(-s * 0.05, -s * 0.012, s * 0.1, s * 0.026, s * 0.013);
+                    ctx.fill(black(0.3));
+                    ctx.round_rect(-s * 0.05, -s * 0.018, s * 0.1, s * 0.022, s * 0.011);
+                    ctx.fill(white(0.28));
+                    ctx.restore();
+                }
+            }
+            for i in [1, 2] {
+                rivet(ctx, corners[i].0, corners[i].1, s * 0.055);
+            }
+        }
+        _ => {
+            if v == 2 {
+                // A dent catching the light.
+                let (x, y) = (s * 0.58, s * 0.55);
+                ctx.begin_path();
+                ctx.circle(x, y, s * 0.09);
+                ctx.fill(radial(x - s * 0.03, y - s * 0.03, 0.0, x, y, s * 0.09, &[(0.0, black(0.28)), (0.7, black(0.08)), (1.0, white(0.0))]));
+                ctx.begin_path();
+                ctx.arc(x, y, s * 0.075, 0.2, 1.6, false);
+                ctx.set_line_width((s * 0.012).max(0.5));
+                ctx.stroke(white(0.3));
+            }
+            for (x, y) in corners {
+                rivet(ctx, x, y, s * 0.055);
+            }
+        }
     }
 
     ctx.set_line_width((s * 0.025).max(1.0));
@@ -991,14 +1257,46 @@ mod tests {
     #[test]
     fn sprites_have_the_requested_size() {
         for kind in KINDS {
-            for px in [4, 5, 17, 64, 150, 256] {
-                let p = block_sprite(kind, Rgb::hex("#ff6f61"), px);
-                assert_eq!((p.width(), p.height()), (px, px));
-                // Something was drawn in the middle.
-                assert!(
-                    p.pixel(px / 2, px / 2).unwrap().alpha() > 0,
-                    "{kind:?} at {px}px"
-                );
+            for look in 0..LOOKS {
+                for px in [4, 5, 17, 64, 150, 256] {
+                    let p = block_sprite(kind, Rgb::hex("#ff6f61"), px, look);
+                    assert_eq!((p.width(), p.height()), (px, px));
+                    // Something was drawn in the middle.
+                    assert!(
+                        p.pixel(px / 2, px / 2).unwrap().alpha() > 0,
+                        "{kind:?} look {look} at {px}px"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn looks_differ_but_keep_the_colour() {
+        let base = Rgb::hex("#3fa7ff");
+        let mean = |p: &Pixmap| {
+            let mut sum = [0.0f64; 3];
+            for px in p.pixels() {
+                let c = px.demultiply();
+                sum[0] += c.red() as f64;
+                sum[1] += c.green() as f64;
+                sum[2] += c.blue() as f64;
+            }
+            sum.map(|v| v / p.pixels().len() as f64)
+        };
+        for kind in KINDS {
+            let looks: Vec<Pixmap> = (0..LOOKS).map(|l| block_sprite(kind, base, 64, l)).collect();
+            let reference = mean(&looks[0]);
+            for (i, a) in looks.iter().enumerate() {
+                for b in &looks[i + 1..] {
+                    let diff = a.data().iter().zip(b.data()).filter(|(x, y)| x.abs_diff(**y) > 8).count();
+                    assert!(diff > a.data().len() / 100, "{kind:?}: two looks are nearly identical");
+                }
+                // Still clearly the same colour.
+                let m = mean(a);
+                for ch in 0..3 {
+                    assert!((m[ch] - reference[ch]).abs() < 22.0, "{kind:?} look {i} drifts in colour: {m:?} vs {reference:?}");
+                }
             }
         }
     }

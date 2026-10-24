@@ -362,6 +362,16 @@ impl App {
 
     fn sync_scene(&mut self) {
         self.scene.board = self.game.board;
+        for i in 0..TRAY_SIZE {
+            let same = match (self.scene.tray[i], self.game.tray[i]) {
+                (Some(a), Some(b)) => a.shape.id == b.shape.id && a.color == b.color,
+                (a, b) => a.is_none() && b.is_none(),
+            };
+            if !same {
+                // A new piece: give its blocks new looks.
+                self.scene.tray_looks[i] = (self.fx.next() * 4294967296.0) as u32;
+            }
+        }
         self.scene.tray = self.game.tray;
         self.scene.lucky = self.game.lucky;
         for i in 0..TRAY_SIZE {
@@ -610,7 +620,7 @@ impl App {
         let t = ((now - d.start) / PICKUP_MS).clamp(0.0, 1.0) as f32;
         let lerp = |a: f32, b: f32| a + (b - a) * t;
         let target = self.snap_target(d).map(|(r, c)| (r, c, preview_lines(&self.game.board, piece.shape, r, c)));
-        Some(DragView { piece, x: lerp(d.from.0, d.x), y: lerp(d.from.1, d.y), cell: lerp(d.from.2, self.layout.cell), target })
+        Some(DragView { piece, slot: d.slot, x: lerp(d.from.0, d.x), y: lerp(d.from.1, d.y), cell: lerp(d.from.2, self.layout.cell), target })
     }
 
     fn drop_piece(&mut self, cancelled: bool) {
@@ -644,6 +654,9 @@ impl App {
         let l = self.layout;
         let cell = l.cell;
         let shape = res.piece.shape;
+        for (k, &(dr, dc)) in shape.cells.iter().enumerate() {
+            self.scene.looks[idx((r + dr) as usize, (c + dc) as usize)] = piece_look(self.scene.tray_looks[slot], k);
+        }
 
         self.scene.placed = Some(Placed { cells: shape.cells.iter().map(|&(dr, dc)| idx((r + dr) as usize, (c + dc) as usize)).collect(), start: now });
         let cx = l.board_x + (c as f32 + shape.cols as f32 / 2.0) * cell;
@@ -664,7 +677,7 @@ impl App {
             let cells: Vec<ClearingCell> = res
                 .cleared
                 .iter()
-                .map(|cc| ClearingCell { r: cc.r, c: cc.c, color: cc.color, delay: ((cc.r as f32 + 0.5 - pr).hypot(cc.c as f32 + 0.5 - pc) * 28.0) as f64 })
+                .map(|cc| ClearingCell { r: cc.r, c: cc.c, color: cc.color, look: self.scene.looks[idx(cc.r, cc.c)], delay: ((cc.r as f32 + 0.5 - pr).hypot(cc.c as f32 + 0.5 - pc) * 28.0) as f64 })
                 .collect();
             let palette = style.palette;
             let fx = &style.tier.fx;
@@ -863,7 +876,7 @@ impl App {
                 shape: ParticleShape::Square,
                 gravity: cell * 30.0,
                 spin: (self.rand() - 0.5) * 14.0,
-                kind: ParticleKind::Block(cc.color),
+                kind: ParticleKind::Block(cc.color, cc.look),
             };
             self.spawn(p);
         }

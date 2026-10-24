@@ -114,8 +114,8 @@ test('memory stays flat over a long game', async ({ page, browserName }) => {
   const after = await snapshot(page, cdp);
   test.info().annotations.push({ type: 'memory', description: JSON.stringify({ warm, after }) });
 
-  // One sprite per colour (plus gray for pieces that don't fit) at one size.
-  expect(after.sprites).toBeLessThanOrEqual(8);
+  // One sprite per colour and look (plus gray for pieces that don't fit) at one size.
+  expect(after.sprites).toBeLessThanOrEqual(8 * 4);
   expect(after.particles).toBe(0);
   expect(after.rings).toBe(0);
   expect(after.beams).toBe(0);
