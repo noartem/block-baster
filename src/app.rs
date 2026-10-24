@@ -424,7 +424,7 @@ impl App {
         let tier_changed = style.tier.level != self.scene.style.tier.level;
         self.scene.style = style;
         self.flush_caches = true;
-        self.audio.set_profile(style.tier.sound);
+        self.audio.set_style(style.tier.level, style.variant);
         self.platform.style_changed(&style);
         if tier_changed && self.layout.width > 0.0 {
             // Wider display fonts make the HUD a little shorter.

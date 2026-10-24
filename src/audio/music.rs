@@ -2,24 +2,36 @@
 //! chill house and house to fast EDM as the score grows and the player speeds
 //! up:
 //!
-//!   e 0    – 0.25  lofi: jazz chords on an FM e-piano, triangle bass, swung boom-bap, a sparse melody, vinyl
+//!   e 0    – 0.25  lofi: jazz chords on the keys, bass, swung boom-bap, a sparse melody, vinyl
 //!   e 0.15 – 0.4   livelier lofi: more bass notes, 16th hats, a clap; the vinyl fades
 //!   e 0.35 – 0.6   chill house: four-on-the-floor kick and offbeat hats replace the swung drums
-//!   e 0.5  – 0.75  house: clap on 2 and 4, pumping saw chords, the e-piano leaves
+//!   e 0.5  – 0.75  house: clap on 2 and 4, pumping chords, the keys leave
 //!   e 0.65 – 0.85  builds every 8 bars: snare roll, noise riser, the kick drops out before the downbeat
 //!   e 0.75 – 1     EDM: arpeggiated lead, 16th hats, rolling bass
 //!
 //! Layers fade in and out between two thresholds of `e` instead of switching
 //! abruptly. Lofi and EDM layers share one progression (jazz voicings vs. plain
 //! triads over the same roots), so they never clash during a crossfade.
+//!
+//! The style decides what this is played on (see [`super::timbre`]): the
+//! tier's material picks the instruments, the drum kit and the mix (Classic is
+//! an FM e-piano, a sine melody, a square arpeggio and saw chords; Gingerbread a
+//! music box, a celesta and sleigh bells; Neon detuned saws and gated snares…),
+//! and the palette transposes it, picks one of three progressions and shades
+//! its brightness. A new style takes over at the next bar: notes already
+//! playing ring out on their old instrument while the mix glides over, so the
+//! music never restarts or clicks, and tempo and intensity carry on.
 
 use super::dsp::{
     Biquad, Compressor, DelayLine, FilterKind, Param, QUANTUM, Reverb, midi_to_hz, saturate,
 };
 use super::engine::{BUSES, Bus, DEFAULT_Q, Dest, NoiseBuf, Source, Voice, VoiceFilter, Voices};
 use super::intensity::MusicState;
+use super::timbre::{
+    Accent, Clap, Fm, Hat, HatKind, Kick, Mix, Patch, Snare, SnareKind, SoundStyle, Src, Texture,
+};
 use crate::game::rng::Rng;
-use crate::styles::Wave;
+use crate::styles::{Mode, Wave};
 
 /// Gain of the music, before the volume.
 pub const VOLUME: f32 = 0.4;
@@ -29,36 +41,111 @@ const LOOKAHEAD: f64 = 0.25;
 const TICK: f64 = 0.04;
 const STEPS: u64 = 16;
 
-// One progression, 8 bars; the last bar holds two chords (Gm9 → C9):
-// Dm9, G13, C^9, Am9, F^9, E7b9, Am9, Gm9, C9.
-const ROOTS: [i32; 9] = [38, 43, 36, 45, 41, 40, 45, 43, 36];
-/// Jazz voicings for the lofi e-piano.
-const JAZZ: [[i32; 4]; 9] = [
-    [53, 57, 60, 64], // Dm9
-    [53, 57, 59, 64], // G13
-    [52, 55, 59, 62], // C^9
-    [52, 55, 59, 60], // Am9
-    [52, 55, 57, 60], // F^9
-    [50, 53, 56, 59], // E7b9
-    [52, 55, 59, 60], // Am9
-    [53, 57, 58, 62], // Gm9
-    [52, 55, 58, 62], // C9
-];
-/// Plain triads over the same roots for house and EDM.
-const TRIADS: [[i32; 3]; 9] = [
-    [62, 65, 69], // Dm
-    [62, 67, 71], // G
-    [64, 67, 72], // C
-    [64, 69, 72], // Am
-    [65, 69, 72], // F
-    [64, 68, 71], // E
-    [64, 69, 72], // Am
-    [62, 67, 70], // Gm
-    [64, 67, 72], // C
-];
-const E_CHORD: usize = 5;
+/// One progression over the 8-bar form; the last bar holds two chords.
+pub struct Progression {
+    /// Bass notes (MIDI).
+    pub roots: [i32; 9],
+    /// Jazz voicings for the lofi keys.
+    pub jazz: [[i32; 4]; 9],
+    /// Plain triads over the same roots for house and EDM.
+    pub triads: [[i32; 3]; 9],
+    /// Dominant E chords, over which the melody's G is raised to G#.
+    pub dominant: [bool; 9],
+}
 
-/// C major pentatonic from C4; over E7b9 the G is raised to G#.
+/// Dm9, G13, C^9, Am9, F^9, E7b9, Am9, Gm9, C9: the original progression.
+const DORIAN: Progression = Progression {
+    roots: [38, 43, 36, 45, 41, 40, 45, 43, 36],
+    jazz: [
+        [53, 57, 60, 64], // Dm9
+        [53, 57, 59, 64], // G13
+        [52, 55, 59, 62], // C^9
+        [52, 55, 59, 60], // Am9
+        [52, 55, 57, 60], // F^9
+        [50, 53, 56, 59], // E7b9
+        [52, 55, 59, 60], // Am9
+        [53, 57, 58, 62], // Gm9
+        [52, 55, 58, 62], // C9
+    ],
+    triads: [
+        [62, 65, 69], // Dm
+        [62, 67, 71], // G
+        [64, 67, 72], // C
+        [64, 69, 72], // Am
+        [65, 69, 72], // F
+        [64, 68, 71], // E
+        [64, 69, 72], // Am
+        [62, 67, 70], // Gm
+        [64, 67, 72], // C
+    ],
+    dominant: [false, false, false, false, false, true, false, false, false],
+};
+
+/// Am9, F^9, Dm9, E7b9, Am9, F^9, G13, Dm9 → E7b9: darker, in A minor.
+const MINOR: Progression = Progression {
+    roots: [45, 41, 38, 40, 45, 41, 43, 38, 40],
+    jazz: [
+        [52, 55, 59, 60], // Am9
+        [52, 55, 57, 60], // F^9
+        [53, 57, 60, 64], // Dm9
+        [50, 53, 56, 59], // E7b9
+        [52, 55, 59, 60], // Am9
+        [52, 55, 57, 60], // F^9
+        [53, 57, 59, 64], // G13
+        [53, 57, 60, 64], // Dm9
+        [50, 53, 56, 59], // E7b9
+    ],
+    triads: [
+        [64, 69, 72], // Am
+        [65, 69, 72], // F
+        [62, 65, 69], // Dm
+        [64, 68, 71], // E
+        [64, 69, 72], // Am
+        [65, 69, 72], // F
+        [62, 67, 71], // G
+        [62, 65, 69], // Dm
+        [64, 68, 71], // E
+    ],
+    dominant: [false, false, false, true, false, false, false, false, true],
+};
+
+/// C^9, Am9, F^9, G13, Em7, Am9, Dm9, F^9 → G13: brighter, in C major.
+const MAJOR: Progression = Progression {
+    roots: [36, 45, 41, 43, 40, 45, 38, 41, 43],
+    jazz: [
+        [52, 55, 59, 62], // C^9
+        [52, 55, 59, 60], // Am9
+        [52, 55, 57, 60], // F^9
+        [53, 57, 59, 64], // G13
+        [50, 54, 55, 59], // Em9
+        [52, 55, 59, 60], // Am9
+        [53, 57, 60, 64], // Dm9
+        [52, 55, 57, 60], // F^9
+        [53, 57, 59, 64], // G13
+    ],
+    triads: [
+        [64, 67, 72], // C
+        [64, 69, 72], // Am
+        [65, 69, 72], // F
+        [62, 67, 71], // G
+        [64, 67, 71], // Em
+        [64, 69, 72], // Am
+        [62, 65, 69], // Dm
+        [65, 69, 72], // F
+        [62, 67, 71], // G
+    ],
+    dominant: [false; 9],
+};
+
+pub fn progression(mode: Mode) -> &'static Progression {
+    match mode {
+        Mode::Dorian => &DORIAN,
+        Mode::Minor => &MINOR,
+        Mode::Major => &MAJOR,
+    }
+}
+
+/// C major pentatonic from C4 (A minor pentatonic too); over E7b9 the G is raised to G#.
 const PENTA: [i32; 10] = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81];
 const ARP: [usize; 16] = [0, 1, 2, 3, 1, 2, 3, 4, 2, 3, 4, 5, 3, 4, 5, 6];
 
@@ -123,6 +210,30 @@ fn opts(wave: Wave, note: f64, vol: f64) -> ToneOpts {
     }
 }
 
+/// The note options of a patch.
+fn patch_opts(p: &Patch, note: f64, vol: f64, hold: Option<f64>) -> ToneOpts {
+    let filtered = p.cutoff > 0.0;
+    ToneOpts {
+        attack: Some(p.attack),
+        decay: Some(p.decay),
+        sustain: Some(p.sustain),
+        release: Some(p.release),
+        hold,
+        cutoff: filtered.then_some(p.cutoff),
+        cutoff_end: filtered.then_some(p.cutoff_end),
+        q: filtered.then_some(p.q),
+        ..opts(src_wave(p.src), note, vol)
+    }
+}
+
+/// The oscillator of a source (FM voices start as a sine and get their FM source after).
+fn src_wave(s: Src) -> Wave {
+    match s {
+        Src::Osc(w) => w,
+        Src::Fm(_) => Wave::Sine,
+    }
+}
+
 /// Envelope options; see [`Instruments::envelope`].
 #[derive(Clone, Copy, Debug, Default)]
 struct Env {
@@ -152,6 +263,24 @@ fn hit(kind: FilterKind, freq: f64, decay: f64) -> Hit {
         attack: None,
     }
 }
+
+/// An anvil's ring: inharmonic FM, bright and quickly dulled.
+const ANVIL: Fm = Fm {
+    ratio: 1.41,
+    index: 4.0,
+    settle_to: 0.1,
+    settle: 0.05,
+    vibrato: 0.0,
+};
+
+/// A high, glassy bell for chimes and glints.
+const BELL: Fm = Fm {
+    ratio: 3.5,
+    index: 1.2,
+    settle_to: 0.2,
+    settle: 0.3,
+    vibrato: 0.0,
+};
 
 /// Synthesised instruments for the soundtrack. Every hit is one or two
 /// short-lived voices, freed once the note ends.
@@ -227,38 +356,44 @@ impl Instruments<'_> {
         self.voices.add(v);
     }
 
-    /// A chord on a two-operator FM electric piano, with a gentle shared vibrato.
-    fn epiano(&mut self, dest: Bus, t: f64, notes: &[i32], vol: f64, hold: f64) {
+    /// A note of `src` with the options `o`.
+    fn src_tone(&mut self, dest: Bus, t: f64, src: Src, o: ToneOpts) {
+        let mut v = self.tone_voice(dest, t, o);
+        if let Src::Fm(fm) = src {
+            v.source = Source::fm(&fm, midi_to_hz(o.note), t, v.start, self.sr);
+        }
+        self.voices.add(v);
+    }
+
+    /// A note on a patch, held for `hold` if given, plus its layer.
+    fn play(&mut self, dest: Bus, t: f64, note: f64, vol: f64, hold: Option<f64>, p: &Patch) {
+        self.src_tone(dest, t, p.src, patch_opts(p, note, vol, hold));
+        if let Some(l) = p.layer {
+            let o = ToneOpts {
+                decay: Some(l.decay),
+                cutoff: (p.cutoff > 0.0).then_some(p.cutoff),
+                cutoff_end: (p.cutoff > 0.0).then_some(p.cutoff_end),
+                q: (p.cutoff > 0.0).then_some(p.q),
+                ..opts(src_wave(l.src), note + l.semis, vol * l.level)
+            };
+            self.src_tone(dest, t, l.src, o);
+        }
+    }
+
+    /// A chord on the keys (an FM electric piano in Classic), each note a little late, held for `hold`.
+    #[allow(clippy::too_many_arguments)]
+    fn keys(&mut self, dest: Bus, t: f64, notes: &[i32], tr: i32, vol: f64, hold: f64, p: &Patch) {
         let stop = self.sample(t + hold + 2.0);
         for &note in notes {
+            let note = note + tr;
             let f = midi_to_hz(note as f64);
             // Players never hit all keys at once.
             let at = t + self.rng.next() * 0.012;
-            let mut v = self.tone_voice(
-                dest,
-                at,
-                ToneOpts {
-                    attack: Some(0.01),
-                    decay: Some(1.6),
-                    sustain: Some(0.35),
-                    hold: Some(hold),
-                    release: Some(1.2),
-                    ..opts(Wave::Sine, note as f64, vol)
-                },
-            );
-            // Bright tine at the attack that settles into a soft, round tone.
-            let mut depth = Param::starting_at((f * 1.8) as f32, self.sr, v.start);
-            depth.set_value_at(f * 1.8, t);
-            depth.set_target_at(f * 1.8 * 0.15, t, 0.25);
-            // The vibrato LFO started with the chord.
-            let lfo_phase = (5.0 * (v.start as f64 / self.sr - t)).rem_euclid(1.0);
-            v.source = Source::Fm {
-                phase: 0.0,
-                mod_phase: 0.0,
-                freq: f,
-                depth,
-                lfo_phase,
-            };
+            let mut v = self.tone_voice(dest, at, patch_opts(p, note as f64, vol, Some(hold)));
+            if let Src::Fm(fm) = p.src {
+                // Bright at the attack, settling into a soft, round tone; the vibrato started with the chord.
+                v.source = Source::fm(&fm, f, t, v.start, self.sr);
+            }
             v.stop = v.stop.min(stop);
             self.voices.add(v);
         }
@@ -281,18 +416,19 @@ impl Instruments<'_> {
 
     /// Noise through a filter with a percussive envelope.
     fn noise_hit(&mut self, dest: Bus, t: f64, vol: f64, o: Hit) {
+        let env = Env {
+            attack: Some(o.attack.unwrap_or(0.001)),
+            decay: Some(o.decay),
+            ..Env::default()
+        };
+        self.noise_env(dest, t, vol, o, env);
+    }
+
+    /// Noise through a filter with any envelope.
+    fn noise_env(&mut self, dest: Bus, t: f64, vol: f64, o: Hit, env: Env) {
         let first = self.sample(t);
         let mut gain = Param::starting_at(0.0, self.sr, first);
-        let stop = Self::envelope(
-            &mut gain,
-            t,
-            vol,
-            Env {
-                attack: Some(o.attack.unwrap_or(0.001)),
-                decay: Some(o.decay),
-                ..Env::default()
-            },
-        );
+        let stop = Self::envelope(&mut gain, t, vol, env);
         let source = self.noise_source();
         let filter = Some(self.filter(o.kind, o.freq, o.q.unwrap_or(0.7)));
         self.voices.add(Voice {
@@ -307,11 +443,11 @@ impl Instruments<'_> {
     }
 
     /// Sine kick with a pitch drop; `punch` 0 = soft and round (lofi), 1 = tight and clicky (house).
-    fn kick(&mut self, dest: Bus, t: f64, vol: f64, punch: f64) {
+    fn kick(&mut self, dest: Bus, t: f64, vol: f64, punch: f64, k: &Kick) {
         let first = self.sample(t);
-        let from = 120.0 + 110.0 * punch;
-        let to = 46.0 + 6.0 * punch;
-        let decay = 0.42 - 0.12 * punch;
+        let from = k.from + k.punch * punch;
+        let to = k.to + 6.0 * punch;
+        let decay = k.decay - 0.12 * punch;
         let mut freq = Param::starting_at(from as f32, self.sr, first);
         freq.set_value_at(from, t);
         freq.exp_ramp_to(to, t + 0.07 + 0.04 * (1.0 - punch));
@@ -337,35 +473,66 @@ impl Instruments<'_> {
         self.noise_hit(
             dest,
             t,
-            vol * (0.1 + 0.25 * punch),
+            vol * (0.1 + 0.25 * punch) * k.click,
             Hit {
                 q: Some(0.8),
-                ..hit(FilterKind::Bandpass, 2200.0 + 1800.0 * punch, 0.012)
+                ..hit(FilterKind::Bandpass, k.click_freq + 1800.0 * punch, 0.012)
             },
         );
     }
 
-    fn snare(&mut self, dest: Bus, t: f64, vol: f64, decay: f64) {
-        self.noise_hit(
-            dest,
-            t,
-            vol,
-            Hit {
-                q: Some(0.6),
-                ..hit(FilterKind::Bandpass, 1900.0, decay)
-            },
-        );
+    fn snare(&mut self, dest: Bus, t: f64, vol: f64, decay: f64, s: &Snare) {
+        let decay = decay * s.decay;
+        let noise = Hit {
+            q: Some(s.q),
+            ..hit(FilterKind::Bandpass, s.freq, decay)
+        };
+        match s.kind {
+            SnareKind::Noise => self.noise_hit(dest, t, vol, noise),
+            SnareKind::Gated => {
+                // Held at full size, then shut.
+                let env = Env {
+                    attack: Some(0.001),
+                    decay: Some(0.05),
+                    sustain: Some(0.5),
+                    hold: Some(0.1 + decay * 0.5),
+                    release: Some(0.012),
+                };
+                self.noise_env(dest, t, vol * 0.9, noise, env);
+            }
+            SnareKind::Wood => {
+                let knock = Hit {
+                    decay: decay * 0.5,
+                    ..noise
+                };
+                self.noise_hit(dest, t, vol * 2.2, knock);
+            }
+            SnareKind::Metal => {
+                self.noise_hit(dest, t, vol * 0.8, noise);
+                let clank = ToneOpts {
+                    attack: Some(0.001),
+                    decay: Some(0.08 + decay * 0.5),
+                    ..opts(Wave::Sine, s.tone + 12.0, vol * 0.35)
+                };
+                self.src_tone(dest, t, Src::Fm(ANVIL), clank);
+            }
+        }
+        let (wave, d) = match s.kind {
+            SnareKind::Wood => (Wave::Sine, decay * 0.3),
+            _ => (Wave::Triangle, decay * 0.5),
+        };
         self.tone(
             dest,
             t,
             ToneOpts {
-                decay: Some(decay * 0.5),
-                ..opts(Wave::Triangle, 54.0, vol * 0.6)
+                decay: Some(d),
+                ..opts(wave, s.tone, vol * s.tone_level)
             },
         );
     }
 
-    fn clap(&mut self, dest: Bus, t: f64, vol: f64) {
+    fn clap(&mut self, dest: Bus, t: f64, vol: f64, c: &Clap) {
+        let vol = vol * c.level;
         let first = self.sample(t);
         let mut g = Param::starting_at(0.0, self.sr, first);
         g.set_value_at(0.0, t);
@@ -377,7 +544,7 @@ impl Instruments<'_> {
         g.set_value_at(vol * 0.8, t + 0.033);
         g.set_target_at(0.0, t + 0.033, 0.045);
         let source = self.noise_source();
-        let filter = Some(self.filter(FilterKind::Bandpass, 1150.0, 1.1));
+        let filter = Some(self.filter(FilterKind::Bandpass, c.freq, c.q));
         self.voices.add(Voice {
             start: first,
             stop: self.sample(t + 0.3),
@@ -389,12 +556,46 @@ impl Instruments<'_> {
         });
     }
 
-    fn hat(&mut self, dest: Bus, t: f64, vol: f64, decay: f64, freq: f64) {
-        self.noise_hit(dest, t, vol, hit(FilterKind::Highpass, freq, decay));
+    fn hat(&mut self, dest: Bus, t: f64, vol: f64, decay: f64, freq: f64, h: &Hat) {
+        let (vol, decay, freq) = (vol * h.level, decay * h.decay, freq * h.freq);
+        match h.kind {
+            HatKind::Noise => {
+                let o = Hit {
+                    q: Some(h.q),
+                    attack: Some(h.attack),
+                    ..hit(h.filter, freq, decay)
+                };
+                self.noise_hit(dest, t, vol, o);
+            }
+            HatKind::Jingle => self.jingle(dest, t, vol, decay, freq),
+        }
     }
 
-    fn crash(&mut self, dest: Bus, t: f64, vol: f64) {
-        self.noise_hit(dest, t, vol, hit(FilterKind::Highpass, 4500.0, 1.6));
+    /// Sleigh bells: three quick shakes of ringing noise and a short tail.
+    fn jingle(&mut self, dest: Bus, t: f64, vol: f64, decay: f64, freq: f64) {
+        let first = self.sample(t);
+        let mut g = Param::starting_at(0.0, self.sr, first);
+        g.set_value_at(0.0, t);
+        for (dt, k) in [(0.0, 1.0), (0.022, 0.6), (0.041, 0.8)] {
+            g.set_value_at(vol * k, t + dt);
+            g.set_target_at(vol * 0.12, t + dt, 0.006);
+        }
+        g.set_target_at(0.0, t + 0.05, decay.max(0.02));
+        let source = self.noise_source();
+        let filter = Some(self.filter(FilterKind::Highpass, freq, 2.0));
+        self.voices.add(Voice {
+            start: first,
+            stop: self.sample(t + 0.05 + decay.max(0.02) * 6.0),
+            source,
+            filter,
+            gain: g,
+            dest: Dest::Music(dest),
+            send: 0.0,
+        });
+    }
+
+    fn crash(&mut self, dest: Bus, t: f64, vol: f64, freq: f64) {
+        self.noise_hit(dest, t, vol, hit(FilterKind::Highpass, freq, 1.6));
     }
 
     /// Noise that rises in volume and brightness over `dur` seconds, leading into a drop.
@@ -423,6 +624,122 @@ impl Instruments<'_> {
     fn crackle(&mut self, dest: Bus, t: f64, vol: f64) {
         let decay = 0.004 + self.rng.next() * 0.012;
         self.noise_hit(dest, t, vol, hit(FilterKind::Highpass, 2500.0, decay));
+    }
+
+    /// Rustling paper: a soft band of noise.
+    fn rustle(&mut self, dest: Bus, t: f64, vol: f64) {
+        let freq = 1600.0 + self.rng.next() * 1600.0;
+        let decay = 0.02 + self.rng.next() * 0.05;
+        let o = Hit {
+            q: Some(0.8),
+            attack: Some(0.006),
+            ..hit(FilterKind::Bandpass, freq, decay)
+        };
+        self.noise_hit(dest, t, vol, o);
+    }
+
+    /// A bubble popping: a sine blip sweeping up.
+    fn bubble(&mut self, dest: Bus, t: f64, vol: f64) {
+        let first = self.sample(t);
+        let from = 350.0 + self.rng.next() * 450.0;
+        let mut freq = Param::starting_at(from as f32, self.sr, first);
+        freq.set_value_at(from, t);
+        freq.exp_ramp_to(from * 2.8, t + 0.035);
+        let mut gain = Param::starting_at(0.0, self.sr, first);
+        let stop = Self::envelope(
+            &mut gain,
+            t,
+            vol,
+            Env {
+                attack: Some(0.002),
+                decay: Some(0.04),
+                ..Env::default()
+            },
+        );
+        self.voices.add(Voice {
+            start: first,
+            stop: self.sample(stop),
+            source: Source::Osc {
+                wave: Wave::Sine,
+                phase: 0.0,
+                freq,
+                detune: 1.0,
+            },
+            filter: None,
+            gain,
+            dest: Dest::Music(dest),
+            send: 0.0,
+        });
+    }
+
+    /// A struck bell on a MIDI note.
+    fn bell(&mut self, dest: Bus, t: f64, note: f64, vol: f64, decay: f64) {
+        let o = ToneOpts {
+            attack: Some(0.002),
+            decay: Some(decay),
+            release: Some(decay * 0.5),
+            ..opts(Wave::Sine, note, vol)
+        };
+        self.src_tone(dest, t, Src::Fm(BELL), o);
+    }
+
+    /// A woodblock knock, high or low.
+    fn woodblock(&mut self, dest: Bus, t: f64, vol: f64, high: bool) {
+        let (note, band) = if high { (84.0, 2100.0) } else { (79.0, 1500.0) };
+        self.tone(
+            dest,
+            t,
+            ToneOpts {
+                attack: Some(0.001),
+                decay: Some(0.045),
+                ..opts(Wave::Sine, note, vol)
+            },
+        );
+        let o = Hit {
+            q: Some(5.0),
+            ..hit(FilterKind::Bandpass, band, 0.025)
+        };
+        self.noise_hit(dest, t, vol * 1.6, o);
+    }
+
+    /// An anvil clank.
+    fn anvil(&mut self, dest: Bus, t: f64, vol: f64) {
+        let o = ToneOpts {
+            attack: Some(0.001),
+            decay: Some(0.3),
+            release: Some(0.1),
+            ..opts(Wave::Sine, 75.0, vol)
+        };
+        self.src_tone(dest, t, Src::Fm(ANVIL), o);
+        self.noise_hit(dest, t, vol * 0.5, hit(FilterKind::Highpass, 5000.0, 0.03));
+    }
+
+    /// A timpani stroke on a MIDI note: the head settles onto its pitch, the felt mallet thuds.
+    fn timpani(&mut self, dest: Bus, t: f64, note: f64, vol: f64) {
+        let first = self.sample(t);
+        let f = midi_to_hz(note);
+        let mut freq = Param::starting_at((f * 1.04) as f32, self.sr, first);
+        freq.set_value_at(f * 1.04, t);
+        freq.exp_ramp_to(f, t + 0.08);
+        let mut gain = Param::starting_at(0.0, self.sr, first);
+        gain.set_value_at(0.0, t);
+        gain.linear_ramp_to(vol, t + 0.004);
+        gain.set_target_at(0.0, t + 0.01, 0.22);
+        self.voices.add(Voice {
+            start: first,
+            stop: self.sample(t + 1.4),
+            source: Source::Osc {
+                wave: Wave::Sine,
+                phase: 0.0,
+                freq,
+                detune: 1.0,
+            },
+            filter: None,
+            gain,
+            dest: Dest::Music(dest),
+            send: 0.0,
+        });
+        self.noise_hit(dest, t, vol * 0.4, hit(FilterKind::Lowpass, 700.0, 0.05));
     }
 }
 
@@ -489,6 +806,45 @@ struct BusState {
 const HISS: f32 = 0.025;
 const DELAY_FEEDBACK: f32 = 0.38;
 
+/// The style's mix settings, gliding from one style to the next.
+struct MixParams {
+    reverb: Param,
+    drum_reverb: Param,
+    delay: Param,
+    drive: Param,
+    trim: Param,
+}
+
+impl MixParams {
+    fn new(sr: f64) -> Self {
+        MixParams {
+            reverb: Param::new(1.0, sr),
+            drum_reverb: Param::new(1.0, sr),
+            delay: Param::new(1.0, sr),
+            drive: Param::new(1.0, sr),
+            trim: Param::new(1.0, sr),
+        }
+    }
+
+    /// Jumps to a style's mix.
+    fn reset(&mut self, m: &Mix, frame: u64) {
+        self.reverb.reset(m.reverb as f32, frame);
+        self.drum_reverb.reset(m.drum_reverb as f32, frame);
+        self.delay.reset(m.delay as f32, frame);
+        self.drive.reset(m.drive as f32, frame);
+        self.trim.reset(m.trim as f32, frame);
+    }
+}
+
+/// Per-sample values of the mix parameters for one render quantum.
+struct MixBufs {
+    reverb: [f32; QUANTUM],
+    drum_reverb: [f32; QUANTUM],
+    delay: [f32; QUANTUM],
+    drive: [f32; QUANTUM],
+    trim: [f32; QUANTUM],
+}
+
 /// All parts of the playing music; stopping fades it out and lets it go.
 pub struct MusicGraph {
     sr: f64,
@@ -508,6 +864,7 @@ pub struct MusicGraph {
     reverb: Reverb,
     pump: Param,
     buses: [BusState; BUSES],
+    mix_params: MixParams,
     hiss: usize,
     countdown: u32,
     mix: [[f32; QUANTUM]; 2],
@@ -515,6 +872,7 @@ pub struct MusicGraph {
     del: [[f32; QUANTUM]; 2],
     shaper: [f32; QUANTUM],
     pump_buf: [f32; QUANTUM],
+    mix_bufs: MixBufs,
 }
 
 impl MusicGraph {
@@ -551,6 +909,7 @@ impl MusicGraph {
             reverb: Reverb::new(sr),
             pump: Param::new(1.0, sr),
             buses,
+            mix_params: MixParams::new(sr),
             hiss: 0,
             countdown: 0,
             mix: [[0.0; QUANTUM]; 2],
@@ -558,6 +917,13 @@ impl MusicGraph {
             del: [[0.0; QUANTUM]; 2],
             shaper: [0.0; QUANTUM],
             pump_buf: [0.0; QUANTUM],
+            mix_bufs: MixBufs {
+                reverb: [0.0; QUANTUM],
+                drum_reverb: [0.0; QUANTUM],
+                delay: [0.0; QUANTUM],
+                drive: [0.0; QUANTUM],
+                trim: [0.0; QUANTUM],
+            },
         }
     }
 
@@ -569,8 +935,8 @@ impl MusicGraph {
         self.active && self.release_at.is_some()
     }
 
-    /// Starts playing, fading in over 1.5 s.
-    pub fn begin(&mut self, now: f64, frame: u64, level: f32, paused: bool) {
+    /// Starts playing, fading in over 1.5 s; a fresh graph starts with the mix of `mix`.
+    pub fn begin(&mut self, now: f64, frame: u64, level: f32, paused: bool, mix: &Mix) {
         self.level = level;
         self.paused = paused;
         if self.releasing() {
@@ -608,6 +974,7 @@ impl MusicGraph {
             }
             self.reverb.clear();
             self.pump.reset(1.0, frame);
+            self.mix_params.reset(mix, frame);
             self.hiss = 0;
             self.countdown = 0;
         }
@@ -670,10 +1037,21 @@ impl MusicGraph {
         }
         self.shaper[..len].fill(0.0);
         self.pump.fill(&mut self.pump_buf[..len]);
+        let (mp, mb) = (&mut self.mix_params, &mut self.mix_bufs);
+        mp.reverb.fill(&mut mb.reverb[..len]);
+        mp.drum_reverb.fill(&mut mb.drum_reverb[..len]);
+        mp.delay.fill(&mut mb.delay[..len]);
+        mp.drive.fill(&mut mb.drive[..len]);
+        mp.trim.fill(&mut mb.trim[..len]);
 
         for (bi, (st, c)) in self.buses.iter_mut().zip(&BUS_CFG).enumerate() {
             let input = &bus[bi][..len];
             let vinyl = bi == Bus::Vinyl as usize;
+            let reverb_scale = if bi == Bus::Drums as usize {
+                &mb.drum_reverb
+            } else {
+                &mb.reverb
+            };
             for (i, &x) in input.iter().enumerate() {
                 let mut x = x;
                 if vinyl {
@@ -717,12 +1095,12 @@ impl MusicGraph {
                     self.mix[1][i] += r;
                 }
                 if c.reverb > 0.0 {
-                    self.rev[0][i] += l * c.reverb;
-                    self.rev[1][i] += r * c.reverb;
+                    self.rev[0][i] += l * c.reverb * reverb_scale[i];
+                    self.rev[1][i] += r * c.reverb * reverb_scale[i];
                 }
                 if c.delay > 0.0 {
-                    self.del[0][i] += l * c.delay;
-                    self.del[1][i] += r * c.delay;
+                    self.del[0][i] += l * c.delay * mb.delay[i];
+                    self.del[1][i] += r * c.delay * mb.delay[i];
                 }
             }
         }
@@ -745,9 +1123,10 @@ impl MusicGraph {
             [&mut mix_l[..len], &mut mix_r[..len]],
         );
 
-        // Gentle saturation on kick and bass: warmer, and audible on phone speakers.
+        // Saturation on kick and bass: warmer, and audible on phone speakers; driven harder for grit.
         for i in 0..len {
-            let s = saturate(self.shaper[i]);
+            let drive = mb.drive[i];
+            let s = saturate(self.shaper[i] * drive) / drive;
             mix_l[i] += s;
             mix_r[i] += s;
         }
@@ -773,8 +1152,8 @@ impl MusicGraph {
 
         for i in 0..len {
             let g = self.out.tick();
-            out_l[i] += mix_l[i] * g;
-            out_r[i] += mix_r[i] * g;
+            out_l[i] += mix_l[i] * g * mb.trim[i];
+            out_r[i] += mix_r[i] * g * mb.trim[i];
         }
     }
 }
@@ -794,7 +1173,14 @@ enum Auto {
     DrumsFilter,
     VinylGain,
     DelayTime,
+    Reverb,
+    DrumReverb,
+    DelaySend,
+    Drive,
+    Trim,
 }
+
+const AUTOS: usize = 13;
 
 /// The step sequencer: schedules a 16th step at a time, a little ahead.
 pub struct Sequencer {
@@ -802,9 +1188,16 @@ pub struct Sequencer {
     next_time: f64,
     melody: i32,
     /// Last value sent to each automated parameter.
-    sent: [Option<f64>; 8],
+    sent: [Option<f64>; AUTOS],
     pub state: MusicState,
     pub next_tick: f64,
+    /// The style the notes are played in...
+    style: SoundStyle,
+    /// ...the one before it, whose mix holds until `switch_at`...
+    prev: SoundStyle,
+    switch_at: f64,
+    /// ...and the one taking over at the next bar.
+    pending: Option<SoundStyle>,
 }
 
 impl Default for Sequencer {
@@ -819,17 +1212,58 @@ impl Sequencer {
             step: 0,
             next_time: 0.0,
             melody: 4,
-            sent: [None; 8],
+            sent: [None; AUTOS],
             state: MusicState::default(),
             next_tick: 0.0,
+            style: SoundStyle::default(),
+            prev: SoundStyle::default(),
+            switch_at: f64::NEG_INFINITY,
+            pending: None,
         }
     }
 
     pub fn begin(&mut self, now: f64) {
-        self.sent = [None; 8];
+        self.sent = [None; AUTOS];
         self.step = 0;
         self.next_time = now + 0.05;
         self.next_tick = now;
+    }
+
+    /// Plays in `style` from now on: right away if the music isn't playing,
+    /// otherwise from the next bar.
+    pub fn set_style(&mut self, style: SoundStyle, playing: bool) {
+        if playing {
+            self.pending = (style != self.style).then_some(style);
+        } else {
+            self.style = style;
+            self.prev = style;
+            self.switch_at = f64::NEG_INFINITY;
+            self.pending = None;
+        }
+    }
+
+    /// How many 16th steps have been scheduled since the music started.
+    pub fn position(&self) -> u64 {
+        self.step
+    }
+
+    /// The style the notes are played in (not counting a pending switch).
+    pub fn style(&self) -> &SoundStyle {
+        &self.style
+    }
+
+    /// The style taking over at the next bar, if any.
+    pub fn pending_style(&self) -> Option<&SoundStyle> {
+        self.pending.as_ref()
+    }
+
+    /// The style of the mix at time `t`.
+    fn style_at(&self, t: f64) -> &SoundStyle {
+        if t >= self.switch_at {
+            &self.style
+        } else {
+            &self.prev
+        }
     }
 
     /// Follows the intensity and schedules the notes of the next quarter second.
@@ -856,10 +1290,13 @@ impl Sequencer {
         self.schedule(g, &mut ins, now, now + LOOKAHEAD);
     }
 
-    /// Continuous parameters that follow the intensity.
+    /// Continuous parameters that follow the intensity and the style.
     fn apply_levels(&mut self, g: &mut MusicGraph, t: f64) {
         let e = self.state.e as f64;
         let bpm = self.state.bpm as f64;
+        let style = *self.style_at(t);
+        let mix = style.timbre().mix;
+        let tone = style.tone();
         let sent = &mut self.sent;
         let mut set = |which: Auto, p: &mut Param, v: f64, tau: f64| {
             let last = &mut sent[which as usize];
@@ -872,7 +1309,7 @@ impl Sequencer {
             *last = Some(v);
         };
         let b = &mut g.buses;
-        // The e-piano filter drifts slowly, like a hand on a knob.
+        // The keys' filter drifts slowly, like a hand on a knob.
         let drift = (t / 7.0).sin() * 0.6 + (t / 3.1).sin() * 0.4;
         set(
             Auto::KeysGain,
@@ -883,7 +1320,7 @@ impl Sequencer {
         set(
             Auto::KeysFilter,
             filter_freq(&mut b[Bus::Keys as usize]),
-            1450.0 + 550.0 * drift + 2500.0 * e,
+            (1450.0 + 550.0 * drift + 2500.0 * e) * mix.keys_tone * tone,
             0.15,
         );
         set(
@@ -895,13 +1332,13 @@ impl Sequencer {
         set(
             Auto::PadFilter,
             filter_freq(&mut b[Bus::Pad as usize]),
-            700.0 + 3500.0 * ramp(e, 0.5, 1.0),
+            (700.0 + 3500.0 * ramp(e, 0.5, 1.0)) * tone,
             0.15,
         );
         set(
             Auto::ArpFilter,
             filter_freq(&mut b[Bus::Arp as usize]),
-            1500.0 + 4000.0 * ramp(e, 0.75, 1.0),
+            (1500.0 + 4000.0 * ramp(e, 0.75, 1.0)) * tone,
             0.15,
         );
         set(
@@ -913,11 +1350,18 @@ impl Sequencer {
         set(
             Auto::VinylGain,
             &mut b[Bus::Vinyl as usize].gain,
-            1.0 - ramp(e, 0.25, 0.5),
+            (1.0 - ramp(e, 0.25, 0.5)) * mix.hiss,
             0.15,
         );
         // Echoes stay on the beat at any tempo.
         set(Auto::DelayTime, &mut g.delay_time, 30.0 / bpm, 0.3);
+        // The style's mix glides over when it changes.
+        let m = &mut g.mix_params;
+        set(Auto::Reverb, &mut m.reverb, mix.reverb, 0.3);
+        set(Auto::DrumReverb, &mut m.drum_reverb, mix.drum_reverb, 0.3);
+        set(Auto::DelaySend, &mut m.delay, mix.delay, 0.3);
+        set(Auto::Drive, &mut m.drive, mix.drive, 0.3);
+        set(Auto::Trim, &mut m.trim, mix.trim, 0.3);
     }
 
     fn schedule(&mut self, g: &mut MusicGraph, ins: &mut Instruments, now: f64, until: f64) {
@@ -938,8 +1382,24 @@ impl Sequencer {
         let speed = self.state.speed as f64;
         let bar = n / STEPS;
         let s = n % STEPS;
+
+        // A new style takes over on the downbeat.
+        if s == 0
+            && let Some(next) = self.pending.take()
+        {
+            self.prev = self.style;
+            self.style = next;
+            self.switch_at = t;
+        }
+        let style = self.style;
+        let tb = style.timbre();
+        let kit = &tb.kit;
+        let tone = style.tone();
+        let tr = style.tint.transpose as i32;
+        let prog = progression(style.mode());
+
         let chord = chord_at(bar, s);
-        let root = ROOTS[chord] as f64;
+        let root = (prog.roots[chord] + tr) as f64;
         let last_of_8 = bar % 8 == 7;
 
         // Stage envelopes.
@@ -949,7 +1409,7 @@ impl Sequencer {
 
         // ══════════ LOFI ══════════
 
-        // E-piano chords, held until the next hit.
+        // Chords on the keys, held until the next hit.
         let mut key_hits = [0u64; 3];
         let mut k = 0;
         for &h in KEYS_HITS[(bar % 4) as usize] {
@@ -965,11 +1425,19 @@ impl Sequencer {
         if key_hits.contains(&s) && ramp(e, 0.45, 0.65) < 0.999 {
             let next = key_hits.iter().copied().find(|&h| h > s).unwrap_or(STEPS);
             let hold = (next - s) as f64 * dur * 0.95;
-            ins.epiano(Bus::Keys, swung, &JAZZ[chord], 0.07, hold);
+            let vol = 0.07 * tb.keys.gain;
+            ins.keys(Bus::Keys, swung, &prog.jazz[chord], tr, vol, hold, &tb.keys);
         }
 
-        // Triangle bass on the root, with extra notes once lofi livens up.
+        // Bass on the root, with extra notes once lofi livens up.
         if lofi > 0.001 {
+            let b = &tb.bass;
+            let filtered = b.cutoff > 0.0;
+            let bass = |vol: f64| ToneOpts {
+                cutoff: filtered.then_some(b.cutoff * tone),
+                q: filtered.then_some(b.q),
+                ..opts(b.wave, root, vol * b.gain)
+            };
             if LOFI_BASS[(bar % 2) as usize].contains(&s) {
                 ins.tone(
                     Bus::Bass,
@@ -980,7 +1448,7 @@ impl Sequencer {
                         sustain: Some(0.6),
                         hold: Some(dur * 1.8),
                         release: Some(0.2),
-                        ..opts(Wave::Triangle, root, 0.5 * lofi)
+                        ..bass(0.5 * lofi)
                     },
                 );
             }
@@ -995,7 +1463,7 @@ impl Sequencer {
                         sustain: Some(0.4),
                         hold: Some(dur * 1.2),
                         release: Some(0.15),
-                        ..opts(Wave::Triangle, root, extra)
+                        ..bass(extra)
                     },
                 );
             }
@@ -1007,7 +1475,7 @@ impl Sequencer {
             let walk = [-2, -1, -1, 1, 1, 2][(ins.rng.next() * 6.0).floor() as usize];
             self.melody = (self.melody + walk).clamp(0, PENTA.len() as i32 - 1);
             let mut note = PENTA[self.melody as usize];
-            if chord == E_CHORD && note % 12 == 7 {
+            if prog.dominant[chord] && note % 12 == 7 {
                 note += 1;
             }
             if chance(ins.rng, 0.15) {
@@ -1017,64 +1485,117 @@ impl Sequencer {
             if let Some(p) = &mut g.buses[Bus::Melody as usize].pan {
                 p.set_value_at(pan, swung);
             }
-            let note = note as f64;
-            ins.tone(
-                Bus::Melody,
-                swung,
-                ToneOpts {
-                    attack: Some(0.005),
-                    decay: Some(0.25),
-                    release: Some(0.3),
-                    ..opts(Wave::Sine, note, melody_vol)
-                },
-            );
-            ins.tone(
-                Bus::Melody,
-                swung,
-                ToneOpts {
-                    decay: Some(0.08),
-                    ..opts(Wave::Triangle, note + 12.0, melody_vol * 0.12)
-                },
-            );
+            let note = (note + tr) as f64;
+            let vol = melody_vol * tb.melody.gain;
+            ins.play(Bus::Melody, swung, note, vol, None, &tb.melody);
         }
 
         // Swung boom-bap; every 16th bar the drums drop out for a bar.
         if lofi_drums > 0.001 {
             if LOFI_KICK[(bar % 2) as usize].contains(&s) {
-                ins.kick(Bus::Kick, swung, 0.75 * lofi_drums, 0.0);
+                ins.kick(Bus::Kick, swung, 0.75 * lofi_drums, 0.0, &kit.kick);
             }
             if s == 4 || s == 12 {
-                ins.snare(Bus::Drums, swung, 0.4 * lofi_drums, 0.2);
+                ins.snare(Bus::Drums, swung, 0.4 * lofi_drums, 0.2, &kit.snare);
                 if chance(ins.rng, 0.1) {
-                    ins.snare(Bus::Drums, swung + dur, 0.18 * lofi_drums, 0.12);
+                    ins.snare(Bus::Drums, swung + dur, 0.18 * lofi_drums, 0.12, &kit.snare);
                 }
                 let clap = 0.22 * ramp(e, 0.25, 0.4) * lofi_drums;
                 if clap > 0.001 {
-                    ins.clap(Bus::Drums, swung + 0.006, clap);
+                    ins.clap(Bus::Drums, swung + 0.006, clap, &kit.clap);
                 }
             }
             // 8th hats (16ths in the 8th bar), loose and humanised.
             let hats16 = last_of_8;
             if (s.is_multiple_of(2) || hats16) && chance(ins.rng, 0.85) {
                 let vol = (0.05 + 0.08 * ins.rng.next()) * lofi_drums;
-                ins.hat(Bus::Drums, swung, vol, 0.03, 7500.0);
+                ins.hat(Bus::Drums, swung, vol, 0.03, 7500.0, &kit.hat);
             }
             // In-between 16ths once it livens up.
             if !hats16 && s % 2 == 1 && chance(ins.rng, ramp(e, 0.15, 0.3) * (0.3 + 0.6 * speed)) {
-                ins.hat(Bus::Drums, swung, 0.06 * lofi_drums, 0.02, 9000.0);
+                ins.hat(Bus::Drums, swung, 0.06 * lofi_drums, 0.02, 9000.0, &kit.hat);
             }
             // Ghost snares follow the player's speed.
             if s != 4 && s != 12 && chance(ins.rng, 0.3 * ramp(speed, 0.35, 0.6)) {
-                ins.snare(Bus::Drums, swung, 0.07 * lofi_drums, 0.06);
+                ins.snare(Bus::Drums, swung, 0.07 * lofi_drums, 0.06, &kit.snare);
             }
         }
 
-        // Vinyl crackle.
+        // Vinyl crackle, or whatever the material crackles with.
         let vinyl = 1.0 - ramp(e, 0.25, 0.5);
-        if vinyl > 0.001 && chance(ins.rng, 0.15) {
-            let at = t + ins.rng.next() * dur;
-            let vol = (0.02 + 0.06 * ins.rng.next()) * vinyl;
-            ins.crackle(Bus::Vinyl, at, vol);
+        if vinyl > 0.001 {
+            match kit.texture {
+                Texture::Vinyl => {
+                    if chance(ins.rng, 0.15) {
+                        let at = t + ins.rng.next() * dur;
+                        let vol = (0.02 + 0.06 * ins.rng.next()) * vinyl;
+                        ins.crackle(Bus::Vinyl, at, vol);
+                    }
+                }
+                Texture::Paper => {
+                    if chance(ins.rng, 0.2) {
+                        let at = t + ins.rng.next() * dur;
+                        let vol = (0.03 + 0.07 * ins.rng.next()) * vinyl;
+                        ins.rustle(Bus::Vinyl, at, vol);
+                    }
+                }
+                Texture::Pops => {
+                    if chance(ins.rng, 0.06) {
+                        let at = t + ins.rng.next() * dur;
+                        let vol = (0.03 + 0.05 * ins.rng.next()) * vinyl;
+                        ins.bubble(Bus::Vinyl, at, vol);
+                    }
+                }
+                Texture::Sleigh => {
+                    if chance(ins.rng, 0.05) {
+                        let at = t + ins.rng.next() * dur;
+                        let vol = (0.02 + 0.03 * ins.rng.next()) * vinyl;
+                        ins.jingle(Bus::Melody, at, vol, 0.06, 6500.0);
+                    }
+                }
+                Texture::Sparkle => {
+                    if chance(ins.rng, 0.05) {
+                        let at = t + ins.rng.next() * dur;
+                        let note = PENTA[ins.rng.int(PENTA.len())] + 24 + tr;
+                        let vol = (0.006 + 0.012 * ins.rng.next()) * vinyl;
+                        ins.bell(Bus::Melody, at, note as f64, vol, 0.4);
+                    }
+                }
+                Texture::Tape => {}
+            }
+        }
+
+        // The material's own percussion.
+        match kit.accent {
+            Accent::None => {}
+            Accent::Woodblock => {
+                if matches!(s, 3 | 11 | 14) && chance(ins.rng, 0.35 + 0.4 * speed) {
+                    let vol = 0.07 * (0.6 + 0.4 * ramp(e, 0.2, 0.6));
+                    ins.woodblock(Bus::Drums, swung, vol, s != 14);
+                }
+            }
+            Accent::Anvil => {
+                if s == 14 && bar % 2 == 1 && chance(ins.rng, 0.7) {
+                    let vol = 0.06 * (0.4 + 0.6 * ramp(e, 0.3, 0.7));
+                    ins.anvil(Bus::Drums, t, vol);
+                }
+            }
+            Accent::Timpani => {
+                let build = last_of_8 && s >= 8 && s.is_multiple_of(2);
+                if (s == 0 && bar.is_multiple_of(4)) || build {
+                    let p = if build { s as f64 / STEPS as f64 } else { 1.0 };
+                    let vol = 0.3 * p * (0.5 + 0.5 * ramp(e, 0.3, 0.7));
+                    ins.timpani(Bus::Fx, t, root + 12.0, vol);
+                }
+            }
+            Accent::Chime => {
+                if (s == 0 && bar.is_multiple_of(2) && chance(ins.rng, 0.7))
+                    || (s == 8 && chance(ins.rng, 0.25))
+                {
+                    let note = prog.triads[chord][2] + 24 + tr;
+                    ins.bell(Bus::Melody, t, note as f64, 0.025, 1.2);
+                }
+            }
         }
 
         // ══════════ HOUSE → EDM ══════════
@@ -1082,7 +1603,7 @@ impl Sequencer {
         // Four-on-the-floor; in the last of 8 bars the final kick drops out before the downbeat.
         let kick = 0.85 * ramp(e, 0.35, 0.5);
         if kick > 0.001 && s.is_multiple_of(4) && !(last_of_8 && s == 12) {
-            ins.kick(Bus::Kick, t, kick, ramp(e, 0.35, 0.8));
+            ins.kick(Bus::Kick, t, kick, ramp(e, 0.35, 0.8), &kit.kick);
         }
 
         // Sidechain pump on the chords from every beat, deeper as it gets more intense.
@@ -1094,12 +1615,12 @@ impl Sequencer {
 
         let clap = 0.5 * ramp(e, 0.5, 0.6);
         if clap > 0.001 && (s == 4 || s == 12) {
-            ins.clap(Bus::Drums, t, clap);
+            ins.clap(Bus::Drums, t, clap, &kit.clap);
         }
 
         let off_hat = 0.28 * ramp(e, 0.4, 0.55);
         if off_hat > 0.001 && s % 4 == 2 {
-            ins.hat(Bus::Drums, t, off_hat, 0.09, 6000.0);
+            ins.hat(Bus::Drums, t, off_hat, 0.09, 6000.0, &kit.hat);
         }
 
         let hats = ramp(e, 0.7, 0.85);
@@ -1110,11 +1631,13 @@ impl Sequencer {
                 0.09 + 0.05 * if s.is_multiple_of(2) { 1.0 } else { 0.0 },
                 0.025,
                 8500.0,
+                &kit.hat,
             );
         }
 
-        // Offbeat saw bass, replaced by a rolling bass at the top.
-        let cutoff = 500.0 + 1500.0 * e;
+        // Offbeat bass, replaced by a rolling bass at the top.
+        let sb = &tb.synth_bass;
+        let cutoff = (500.0 + 1500.0 * e) * sb.cutoff * tone;
         let off_bass = 0.3 * ramp(e, 0.45, 0.6) * (1.0 - ramp(e, 0.82, 0.92));
         if off_bass > 0.001 && s % 4 == 2 {
             ins.tone(
@@ -1127,8 +1650,8 @@ impl Sequencer {
                     release: Some(0.05),
                     cutoff: Some(cutoff * 2.0),
                     cutoff_end: Some(cutoff),
-                    q: Some(3.0),
-                    ..opts(Wave::Sawtooth, root, off_bass)
+                    q: Some(3.0 * sb.q),
+                    ..opts(sb.wave, root, off_bass * sb.gain)
                 },
             );
         }
@@ -1142,67 +1665,61 @@ impl Sequencer {
                     sustain: Some(0.1),
                     hold: Some(dur * 0.8),
                     release: Some(0.03),
-                    cutoff: Some((800.0 + 1800.0 * e) * 1.8),
-                    cutoff_end: Some(600.0),
-                    q: Some(4.0),
-                    ..opts(Wave::Sawtooth, root, roll)
+                    cutoff: Some((800.0 + 1800.0 * e) * sb.cutoff * tone * 1.8),
+                    cutoff_end: Some(600.0 * sb.cutoff * tone),
+                    q: Some(4.0 * sb.q),
+                    ..opts(sb.wave, root, roll * sb.gain)
                 },
             );
         }
 
-        // Two detuned saws per chord note, held for the chord; the pump makes them breathe.
+        // Two detuned voices per chord note, held for the chord; the pump makes them breathe.
         if (s == 0 || (last_of_8 && s == 8)) && ramp(e, 0.5, 0.65) > 0.001 {
             let len = (if last_of_8 { 8 } else { STEPS }) as f64 * dur;
-            let tri = TRIADS[chord];
-            for note in [ROOTS[chord] + 12, tri[0], tri[1], tri[2]] {
-                for detune in [-9.0, 9.0] {
+            let tri = prog.triads[chord];
+            let pad = &tb.pad;
+            for note in [prog.roots[chord] + 12, tri[0], tri[1], tri[2]] {
+                for detune in [-pad.detune, pad.detune] {
                     ins.tone(
                         Bus::Pad,
                         t,
                         ToneOpts {
                             detune,
-                            attack: Some(0.02),
+                            attack: Some(pad.attack),
                             decay: Some(0.3),
                             sustain: Some(0.8),
                             hold: Some(len),
                             release: Some(0.12),
-                            ..opts(Wave::Sawtooth, note as f64, 0.034)
+                            ..opts(pad.wave, (note + tr) as f64, 0.034 * pad.gain)
                         },
                     );
                 }
             }
         }
 
-        // Arpeggiated square lead over the chord tones, sweeping across the stereo field.
+        // Arpeggiated lead over the chord tones, sweeping across the stereo field.
         let arp = 0.1 * ramp(e, 0.75, 0.9);
         if arp > 0.001 {
             let i = ARP[s as usize];
-            let tri = TRIADS[chord];
+            let tri = prog.triads[chord];
             if let Some(p) = &mut g.buses[Bus::Arp as usize].pan {
                 p.set_value_at(
                     0.4 * (s as f64 / STEPS as f64 * std::f64::consts::PI * 4.0).sin(),
                     t,
                 );
             }
-            let note = tri[i % 3] + 12 * (i / 3) as i32;
-            ins.tone(
-                Bus::Arp,
-                t,
-                ToneOpts {
-                    decay: Some(0.13),
-                    release: Some(0.04),
-                    ..opts(Wave::Square, note as f64, arp)
-                },
-            );
+            let note = tri[i % 3] + 12 * (i / 3) as i32 + tr;
+            ins.play(Bus::Arp, t, note as f64, arp * tb.arp.gain, None, &tb.arp);
         }
 
         // Build every 8 bars: a snare roll and a noise riser into the next downbeat, then a crash.
         let build = ramp(e, 0.65, 0.8);
         if build > 0.001 && last_of_8 {
             let p = s as f64 / STEPS as f64;
-            ins.snare(Bus::Fx, t, (0.04 + 0.26 * p * p) * build, 0.08);
+            ins.snare(Bus::Fx, t, (0.04 + 0.26 * p * p) * build, 0.08, &kit.snare);
             if s >= 8 {
-                ins.snare(Bus::Fx, t + dur / 2.0, (0.04 + 0.26 * p * p) * build, 0.06);
+                let vol = (0.04 + 0.26 * p * p) * build;
+                ins.snare(Bus::Fx, t + dur / 2.0, vol, 0.06, &kit.snare);
             }
             if s == 0 {
                 ins.riser(Bus::Fx, t, STEPS as f64 * dur, 0.22 * build);
@@ -1210,7 +1727,7 @@ impl Sequencer {
         }
         let crash = 0.12 * ramp(e, 0.6, 0.75);
         if crash > 0.001 && bar > 0 && bar.is_multiple_of(8) && s == 0 {
-            ins.crash(Bus::Fx, t, crash);
+            ins.crash(Bus::Fx, t, crash, kit.crash);
         }
     }
 }
@@ -1236,5 +1753,23 @@ mod tests {
         assert_eq!(chord_at(7, 8), 8);
         assert_eq!(chord_at(15, 15), 8);
         assert_eq!(chord_at(8, 0), 0);
+    }
+
+    #[test]
+    fn every_progression_keeps_its_voicings_over_its_roots() {
+        for mode in [Mode::Dorian, Mode::Minor, Mode::Major] {
+            let p = progression(mode);
+            for c in 0..9 {
+                // The bass stays low, the voicings in the middle, the triads above.
+                assert!((36..=45).contains(&p.roots[c]), "{mode:?} {c}");
+                assert!(p.jazz[c].iter().all(|n| (50..=64).contains(n)), "{mode:?} {c}");
+                assert!(p.triads[c].iter().all(|n| (62..=72).contains(n)), "{mode:?} {c}");
+                // The triad is built on the root.
+                assert!(p.triads[c].iter().any(|n| n % 12 == p.roots[c] % 12), "{mode:?} {c}");
+                if p.dominant[c] {
+                    assert_eq!(p.roots[c] % 12, 4, "{mode:?} {c}: dominant E");
+                }
+            }
+        }
     }
 }
