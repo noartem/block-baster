@@ -30,7 +30,7 @@ test.beforeAll(() => mkdirSync(OUT, { recursive: true }));
 
 async function open(page: Page) {
   await page.goto('/?seed=2024&reset');
-  await page.waitForSelector('body[data-ready=true]');
+  await page.waitForFunction(() => document.body.dataset.ready === 'true' && !!window.blockBaster);
 }
 
 /** Sets up a game position: board, tray, score, best and combo streak. */
@@ -39,28 +39,23 @@ async function stage(
   opts: { board: number[][]; tray: string[]; score: number; best: number; combo?: number },
 ) {
   await page.evaluate((o) => {
-    const app = window.blockBaster;
-    // Reach into private UI state so the HUD shows the staged numbers immediately.
-    const ui = app as unknown as { shownScore: number; bestAtStart: number; updateHud(force: boolean): void };
-    o.board.flat().forEach((v, i) => (app.game.board[i] = v));
-    app.game.score = o.score;
-    app.game.combo = o.combo ?? 0;
-    app.best = o.best;
-    ui.shownScore = o.score;
-    ui.bestAtStart = o.best;
-    app.debugSetTray(o.tray);
-    ui.updateHud(true);
+    const bb = window.blockBaster;
+    bb.setBoard(o.board);
+    bb.set({ score: o.score, combo: o.combo ?? 0, best: o.best, bestAtStart: o.best });
+    bb.setTray(o.tray);
+    // Show the staged numbers at once instead of counting up to them.
+    bb.settle();
   }, opts);
   await page.waitForTimeout(500);
 }
 
 /** Canvas-relative coordinates of a tray slot and of a board drop target (mouse holds pieces by their centre). */
 async function geometry(page: Page, slot: number, r: number, c: number) {
-  const box = (await page.locator('#game').boundingBox())!;
-  const g = await page.evaluate(
+  // The canvas fills the page, so canvas coordinates are page coordinates.
+  return page.evaluate(
     ({ slot, r, c }) => {
-      const { layout, game } = window.blockBaster;
-      const shape = game.tray[slot]!.shape;
+      const { layout, tray } = window.blockBaster.state();
+      const shape = tray[slot]!;
       return {
         from: { x: layout.slots[slot].cx, y: layout.slots[slot].cy },
         to: { x: layout.boardX + (c + shape.cols / 2) * layout.cell, y: layout.boardY + (r + shape.rows / 2) * layout.cell },
@@ -68,10 +63,6 @@ async function geometry(page: Page, slot: number, r: number, c: number) {
     },
     { slot, r, c },
   );
-  return {
-    from: { x: box.x + g.from.x, y: box.y + g.from.y },
-    to: { x: box.x + g.to.x, y: box.y + g.to.y },
-  };
 }
 
 /** Moves the mouse in small timed steps so recordings show a smooth drag. */
@@ -105,7 +96,7 @@ test('gameplay screenshots', async ({ page }) => {
   await page.mouse.up();
   await page.waitForTimeout(170);
   await shot(page, 'screenshot-clear.png');
-  expect(await page.evaluate(() => window.blockBaster.game.combo)).toBe(3);
+  expect(await page.evaluate(() => window.blockBaster.state().combo)).toBe(3);
 });
 
 test('game over screenshot', async ({ page }) => {
@@ -118,20 +109,19 @@ test('game over screenshot', async ({ page }) => {
   );
   await stage(page, { board, tray: ['dot-0', 'O2-0', 'I3-0'], score: 4869, best: 4120 });
   await page.evaluate(() => window.blockBaster.commit(0, 0, 0));
-  await expect(page.locator('#gameover')).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('#record')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.blockBaster.state().overlay), { timeout: 10_000 }).toBe('gameover');
+  expect(await page.evaluate(() => window.blockBaster.state().record)).toBe(true);
   await page.waitForTimeout(600);
   await shot(page, 'screenshot-gameover.png');
 });
 
 test('showcase banner', async ({ page }) => {
   const img = (name: string) => `data:image/png;base64,${readFileSync(join(OUT, name)).toString('base64')}`;
-  const font = (w: number) =>
-    readFileSync(`node_modules/@fontsource/baloo-2/files/baloo-2-latin-${w}-normal.woff2`).toString('base64');
+  const font = (name: string) => readFileSync(`assets/fonts/${name}.ttf`).toString('base64');
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.setContent(`<!doctype html><html><head><style>
-    @font-face { font-family: 'Baloo 2'; font-weight: 800; src: url(data:font/woff2;base64,${font(800)}) format('woff2'); }
-    @font-face { font-family: 'Baloo 2'; font-weight: 600; src: url(data:font/woff2;base64,${font(600)}) format('woff2'); }
+    @font-face { font-family: 'Baloo 2'; font-weight: 800; src: url(data:font/ttf;base64,${font('Baloo2-ExtraBold')}) format('truetype'); }
+    @font-face { font-family: 'Baloo 2'; font-weight: 600; src: url(data:font/ttf;base64,${font('Baloo2-SemiBold')}) format('truetype'); }
     * { box-sizing: border-box; margin: 0; }
     body { width: 1600px; height: 900px; overflow: hidden; font-family: 'Baloo 2', sans-serif; color: #fff;
       background: radial-gradient(circle at 20% 15%, #2ec2bd 0%, #168a8e 35%, #0a3f4a 100%); display: flex; align-items: center; }
@@ -181,15 +171,16 @@ test('gameplay recording', async ({ browser }) => {
   for (let move = 0; move < 7; move++) {
     type Move = { slot: number; r: number; c: number; value: number };
     const best = await page.evaluate((): Move | null => {
-      const { game } = window.blockBaster;
+      const bb = window.blockBaster;
+      const { board, tray } = bb.state();
       let pick = null as Move | null;
-      game.tray.forEach((piece, slot) => {
+      tray.forEach((piece, slot) => {
         if (!piece) return;
         for (let r = 0; r < 8; r++)
           for (let c = 0; c < 8; c++) {
-            if (!game.canPlace(slot, r, c)) continue;
-            const b = game.board.slice();
-            for (const [dr, dc] of piece.shape.cells) b[(r + dr) * 8 + c + dc] = 1;
+            if (!bb.canPlace(slot, r, c)) continue;
+            const b = board.slice();
+            for (const [dr, dc] of piece.cells) b[(r + dr) * 8 + c + dc] = 1;
             let lines = 0;
             for (let i = 0; i < 8; i++) {
               let row = true;
@@ -201,9 +192,9 @@ test('gameplay recording', async ({ browser }) => {
               lines += Number(row) + Number(col);
             }
             let touch = 0;
-            for (const [dr, dc] of piece.shape.cells)
+            for (const [dr, dc] of piece.cells)
               for (const [y, x] of [[r + dr - 1, c + dc], [r + dr + 1, c + dc], [r + dr, c + dc - 1], [r + dr, c + dc + 1]])
-                touch += y < 0 || y > 7 || x < 0 || x > 7 || game.board[y * 8 + x] !== 0 ? 1 : 0;
+                touch += y < 0 || y > 7 || x < 0 || x > 7 || board[y * 8 + x] !== 0 ? 1 : 0;
             const value = lines * 100 + touch;
             if (!pick || value > pick.value) pick = { slot, r, c, value };
           }

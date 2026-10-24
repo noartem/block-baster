@@ -9,3 +9,8 @@ playwright-report/
 .idea/
 .vscode/
 /screenshots/
+/target/
+/dist/
+/.claude/worktrees/
+/node_modules/
+!/tests/fixtures/**/*.log

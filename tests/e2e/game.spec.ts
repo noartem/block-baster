@@ -1,52 +1,11 @@
-import { type Page, expect, test } from '@playwright/test';
-import { TOUCH_GAIN } from '../../src/input';
-
-async function open(page: Page, query = '?seed=12345&reset') {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
-  });
-  await page.goto(`/${query}`);
-  await page.waitForSelector('body[data-ready=true]');
-  return errors;
-}
-
-/** Finds a legal move for the first piece in the tray, in canvas coordinates. */
-async function findMove(page: Page) {
-  return page.evaluate(() => {
-    const app = window.blockBaster;
-    const { layout, game } = app;
-    for (let slot = 0; slot < 3; slot++) {
-      const piece = game.tray[slot];
-      if (!piece) continue;
-      for (let r = 0; r < 8; r++)
-        for (let c = 0; c < 8; c++)
-          if (game.canPlace(slot, r, c)) {
-            const w = piece.shape.cols * layout.cell;
-            const h = piece.shape.rows * layout.cell;
-            return {
-              slot,
-              r,
-              c,
-              size: piece.shape.cells.length,
-              from: { x: layout.slots[slot].cx, y: layout.slots[slot].cy },
-              topLeft: { x: layout.boardX + c * layout.cell, y: layout.boardY + r * layout.cell },
-              w,
-              h,
-              cell: layout.cell,
-            };
-          }
-    }
-    return null;
-  });
-}
+import { expect, test } from '@playwright/test';
+import { TOUCH_GAIN, expectOverlay, findMove, open, slide, state, tap, waitReady, waitUi } from './helpers';
 
 test('loads without errors and deals three pieces', async ({ page }) => {
   const errors = await open(page);
-  await expect(page.locator('#score')).toHaveText('0');
-  const tray = await page.evaluate(() => window.blockBaster.game.tray.filter(Boolean).length);
-  expect(tray).toBe(3);
+  const s = await state(page);
+  expect(s.score).toBe(0);
+  expect(s.tray.filter(Boolean).length).toBe(3);
   await expect(page.locator('#game')).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -54,30 +13,21 @@ test('loads without errors and deals three pieces', async ({ page }) => {
 test('drags a piece onto the board with the mouse', async ({ page }) => {
   await open(page);
   const move = (await findMove(page))!;
-  const box = (await page.locator('#game').boundingBox())!;
-  await page.mouse.move(box.x + move.from.x, box.y + move.from.y);
+  await page.mouse.move(move.from.x, move.from.y);
   await page.mouse.down();
   // With a mouse the piece is held by its centre.
-  await page.mouse.move(box.x + move.topLeft.x + move.w / 2, box.y + move.topLeft.y + move.h / 2, { steps: 10 });
+  await page.mouse.move(move.topLeft.x + move.w / 2, move.topLeft.y + move.h / 2, { steps: 10 });
   await page.mouse.up();
-  await expect(page.locator('#score')).toHaveText(String(move.size));
-  const state = await page.evaluate((slot) => ({ empty: window.blockBaster.game.tray[slot] === null, moves: window.blockBaster.game.moves }), move.slot);
-  expect(state).toEqual({ empty: true, moves: 1 });
+  await expect.poll(async () => (await state(page)).score).toBe(move.size);
+  const s = await state(page);
+  expect({ empty: s.tray[move.slot] === null, moves: s.moves }).toEqual({ empty: true, moves: 1 });
 });
 
 test('touch drags lift the piece above the finger and move it faster', async ({ page }) => {
   await open(page);
   const move = (await findMove(page))!;
-  const box = (await page.locator('#game').boundingBox())!;
   const fire = (type: string, x: number, y: number) =>
-    page.locator('#game').dispatchEvent(type, {
-      pointerId: 7,
-      pointerType: 'touch',
-      isPrimary: true,
-      clientX: box.x + x,
-      clientY: box.y + y,
-      bubbles: true,
-    });
+    page.locator('#game').dispatchEvent(type, { pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true });
   await fire('pointerdown', move.from.x, move.from.y);
   // The piece starts centred above the finger, its bottom edge 1.1 cells higher,
   // then moves TOUCH_GAIN times as far as the finger does.
@@ -88,126 +38,147 @@ test('touch drags lift the piece above the finger and move it faster', async ({ 
   await fire('pointermove', fx, fy);
   // Lifting the finger may slide it a little; the drop keeps the last move's spot.
   await fire('pointerup', fx + move.cell, fy + move.cell);
-  await expect(page.locator('#score')).toHaveText(String(move.size));
+  await expect.poll(async () => (await state(page)).score).toBe(move.size);
 });
 
 test('a piece dropped outside the board returns to the tray', async ({ page }) => {
   await open(page);
   const move = (await findMove(page))!;
-  const box = (await page.locator('#game').boundingBox())!;
-  await page.mouse.move(box.x + move.from.x, box.y + move.from.y);
+  await page.mouse.move(move.from.x, move.from.y);
   await page.mouse.down();
-  await page.mouse.move(box.x + 5, box.y + 5, { steps: 5 });
+  await page.mouse.move(5, 5, { steps: 5 });
   await page.mouse.up();
-  const state = await page.evaluate(() => ({ tray: window.blockBaster.game.tray.filter(Boolean).length, score: window.blockBaster.game.score }));
-  expect(state).toEqual({ tray: 3, score: 0 });
+  const s = await state(page);
+  expect({ tray: s.tray.filter(Boolean).length, score: s.score }).toEqual({ tray: 3, score: 0 });
 });
 
 test('progress is saved and restored after a reload', async ({ page }) => {
   await open(page);
   const move = (await findMove(page))!;
   await page.evaluate(({ slot, r, c }) => window.blockBaster.commit(slot, r, c), move);
-  const before = await page.evaluate(() => JSON.stringify(window.blockBaster.game.serialize()));
+  const before = await page.evaluate(() => JSON.stringify(window.blockBaster.serialize()));
   await page.goto('/');
-  await page.waitForSelector('body[data-ready=true]');
-  const after = await page.evaluate(() => JSON.stringify(window.blockBaster.game.serialize()));
+  await waitReady(page);
+  const after = await page.evaluate(() => JSON.stringify(window.blockBaster.serialize()));
   expect(after).toBe(before);
-  await expect(page.locator('#score')).toHaveText(String(move.size));
-  await expect(page.locator('#best')).toHaveText(String(move.size));
+  const s = await state(page);
+  expect(s.score).toBe(move.size);
+  expect(s.best).toBe(move.size);
 });
 
 test('shows the game over screen and starts a new game', async ({ page }) => {
   await open(page);
   await page.evaluate(() => {
-    const app = window.blockBaster;
+    const bb = window.blockBaster;
     // Checkerboard with the top-left cell free: only single cells fit, never a 2x2 square.
-    for (let i = 0; i < 64; i++) app.game.board[i] = (Math.floor(i / 8) + i) % 2 === 0 ? 0 : 3;
-    app.debugSetTray(['dot-0', 'O2-0', 'O2-0']);
-    app.commit(0, 0, 0);
+    bb.setBoard(Array.from({ length: 64 }, (_, i) => ((Math.floor(i / 8) + i) % 2 === 0 ? 0 : 3)));
+    bb.setTray(['dot-0', 'O2-0', 'O2-0']);
+    bb.commit(0, 0, 0);
   });
-  await expect(page.locator('#gameover')).toBeVisible({ timeout: 5000 });
-  await expect(page.locator('#final-score')).toHaveText('1');
-  await expect(page.locator('#record')).toBeVisible();
-  await page.locator('#again-btn').click();
-  await expect(page.locator('#gameover')).toBeHidden();
-  await expect(page.locator('#score')).toHaveText('0');
-  const fresh = await page.evaluate(() => ({
-    over: window.blockBaster.game.over,
-    filled: window.blockBaster.game.board.filter((v) => v).length,
-  }));
-  expect(fresh).toEqual({ over: false, filled: 0 });
+  await expectOverlay(page, 'gameover');
+  let s = await state(page);
+  expect(s.score).toBe(1);
+  expect(s.record).toBe(true);
+  await tap(page, 'again');
+  await expectOverlay(page, 'none');
+  s = await state(page);
+  expect({ score: s.score, over: s.over, filled: s.board.filter((v) => v).length }).toEqual({ score: 0, over: false, filled: 0 });
 });
 
 test('clearing the board switches the style and high scores unlock new tiers', async ({ page }) => {
   const errors = await open(page);
   await expect(page.locator('body')).toHaveAttribute('data-style', '0.0');
-  await expect(page.locator('#style-name')).toHaveText('Classic · Lagoon');
+  expect((await state(page)).style.name).toBe('Classic · Lagoon');
   await page.evaluate(() => {
-    const app = window.blockBaster;
-    for (let c = 0; c < 7; c++) app.game.board[c] = 2;
-    app.debugSetTray(['dot-0', 'dot-0', 'dot-0']);
-    app.commit(0, 0, 7);
+    const bb = window.blockBaster;
+    const board = Array(64).fill(0);
+    for (let c = 0; c < 7; c++) board[c] = 2;
+    bb.setBoard(board);
+    bb.setTray(['dot-0', 'dot-0', 'dot-0']);
+    bb.commit(0, 0, 7);
   });
   await expect(page.locator('body')).toHaveAttribute('data-style', '0.1');
-  await expect(page.locator('#style-name')).toHaveText('Classic · Ember');
+  expect((await state(page)).style.name).toBe('Classic · Ember');
 
   await page.evaluate(() => {
-    const app = window.blockBaster;
-    app.game.score = 129_990;
-    for (let c = 0; c < 7; c++) app.game.board[8 + c] = 4;
-    app.commit(1, 1, 7);
+    const bb = window.blockBaster;
+    bb.set({ score: 129_990 });
+    const board = Array(64).fill(0);
+    for (let c = 0; c < 7; c++) board[8 + c] = 4;
+    bb.setBoard(board);
+    bb.commit(1, 1, 7);
   });
   await expect(page.locator('body')).toHaveAttribute('data-tier', '7');
-  await expect(page.locator('#style-name')).toContainText('Neon');
+  expect((await state(page)).style.name).toContain('Neon');
   await page.waitForTimeout(1500);
   expect(errors).toEqual([]);
 });
 
 test('music starts on the first touch, speeds up with the score and can be turned off', async ({ page }) => {
+  test.setTimeout(60_000);
   const errors = await open(page);
-  const box = (await page.locator('#game').boundingBox())!;
-  await page.mouse.click(box.x + 5, box.y + 5);
-  await expect.poll(() => page.evaluate(() => window.blockBaster.music.playing)).toBe(true);
-  expect(await page.evaluate(() => window.blockBaster.music.state.bpm)).toBeLessThan(80);
-  await page.evaluate(() => (window.blockBaster.game.score = 100_000));
-  await expect.poll(() => page.evaluate(() => window.blockBaster.music.state.bpm), { timeout: 15_000 }).toBeGreaterThan(100);
-  await page.locator('#menu-btn').click();
-  await page.locator('#music-level').fill('0');
-  await expect(page.locator('#music-value')).toHaveText('Off');
-  expect(await page.evaluate(() => window.blockBaster.music.playing)).toBe(false);
-  await page.locator('#music-level').fill('60');
-  await expect.poll(() => page.evaluate(() => window.blockBaster.music.playing)).toBe(true);
-  expect(await page.evaluate(() => window.blockBaster.music.volume)).toBeCloseTo(0.6);
+  await page.mouse.click(5, 300);
+  await expect.poll(async () => (await state(page)).music.playing).toBe(true);
+  expect((await state(page)).music.bpm).toBeLessThan(80);
+  await page.evaluate(() => window.blockBaster.set({ score: 100_000 }));
+  await expect.poll(async () => (await state(page)).music.bpm, { timeout: 15_000 }).toBeGreaterThan(100);
+  await tap(page, 'menuButton');
+  await expectOverlay(page, 'menu');
+  await slide(page, 'music', 0);
+  let s = await state(page);
+  expect(s.settings.music).toBe(0);
+  expect(s.music.playing).toBe(false);
+  await slide(page, 'music', 0.6);
+  await expect.poll(async () => (await state(page)).music.playing).toBe(true);
+  s = await state(page);
+  expect(s.music.volume).toBeCloseTo(0.6);
   expect(errors).toEqual([]);
 });
 
 test('menu sliders set the volumes and persist them', async ({ page }) => {
   await open(page);
-  await page.locator('#menu-btn').click();
-  await expect(page.locator('#menu')).toBeVisible();
-  // "Exit" only exists inside the Android app.
-  await expect(page.locator('#exit-btn')).toBeHidden();
-  await expect(page.locator('#sound-value')).toHaveText('100%');
-  await page.locator('#sound-level').fill('40');
-  await expect(page.locator('#sound-value')).toHaveText('40%');
-  expect(await page.evaluate(() => window.blockBaster.settings.sound)).toBeCloseTo(0.4);
-  await page.locator('#resume-btn').click();
-  await expect(page.locator('#menu')).toBeHidden();
+  await tap(page, 'menuButton');
+  await expectOverlay(page, 'menu');
+  let s = await state(page);
+  // "Exit" only exists inside the apps.
+  expect(s.ui.exit).toBeNull();
+  expect(s.settings.sound).toBe(1);
+  await slide(page, 'sound', 0.4);
+  s = await state(page);
+  expect(s.settings.sound).toBeCloseTo(0.4);
+  expect(s.soundVolume).toBeCloseTo(0.4);
+  await tap(page, 'resume');
+  await expectOverlay(page, 'none');
   await page.goto('/');
-  await page.waitForSelector('body[data-ready=true]');
-  await page.locator('#menu-btn').click();
-  await expect(page.locator('#sound-level')).toHaveValue('40');
-  await expect(page.locator('#music-level')).toHaveValue('100');
+  await waitReady(page);
+  s = await state(page);
+  expect(s.settings.sound).toBeCloseTo(0.4);
+  expect(s.settings.music).toBe(1);
+});
+
+test('the menu closes on Escape and on a tap outside the card', async ({ page }) => {
+  await open(page);
+  await page.keyboard.press('Escape');
+  await expectOverlay(page, 'menu');
+  await page.keyboard.press('Escape');
+  await expectOverlay(page, 'none');
+  await tap(page, 'menuButton');
+  await expectOverlay(page, 'menu');
+  await waitUi(page, 'resume');
+  await page.mouse.click(4, 4);
+  await expectOverlay(page, 'none');
 });
 
 test('vibration settings only show up on devices that can vibrate', async ({ page, isMobile }) => {
   await open(page);
-  await page.locator('#menu-btn').click();
+  await tap(page, 'menuButton');
+  await waitUi(page, 'resume');
+  const s = await state(page);
   if (isMobile) {
-    await expect(page.locator('#haptics-row')).toBeVisible();
-    await expect(page.locator('#haptics-value')).toHaveText('50%');
+    expect(s.ui.haptics).not.toBeNull();
+    expect(s.settings.haptics).toBe(0.5);
   } else {
-    await expect(page.locator('#haptics-row')).toBeHidden();
+    expect(s.ui.haptics).toBeNull();
   }
 });
 
@@ -215,10 +186,27 @@ test('turns the on/off switches of older versions into levels', async ({ page })
   await open(page);
   await page.evaluate(() => localStorage.setItem('bb.settings', JSON.stringify({ sound: false, music: true, haptics: true })));
   await page.goto('/');
-  await page.waitForSelector('body[data-ready=true]');
-  expect(await page.evaluate(() => window.blockBaster.settings)).toEqual({ sound: 0, music: 1, haptics: 0.5 });
-  await page.locator('#menu-btn').click();
-  await expect(page.locator('#sound-value')).toHaveText('Off');
+  await waitReady(page);
+  expect((await state(page)).settings).toEqual({ sound: 0, music: 1, haptics: 0.5 });
+});
+
+test('continues a game saved by the old web version', async ({ page }) => {
+  await open(page);
+  // Write the old save from a page of the same site that doesn't run the game (it saves on the way out).
+  await page.goto('/manifest.webmanifest');
+  await page.evaluate(() => {
+    const board = Array(64).fill(0);
+    board[63] = 3;
+    localStorage.setItem('bb.best', '5000');
+    localStorage.setItem(
+      'bb.game',
+      JSON.stringify({ v: 1, board, tray: [{ id: 'L4-2', color: 5 }, null, { id: 'dot-0', color: 1 }], score: 120, combo: 1, sinceClear: 0, moves: 12, rng: 123456, over: false }),
+    );
+  });
+  await page.goto('/');
+  await waitReady(page);
+  const s = await state(page);
+  expect({ score: s.score, best: s.best, moves: s.moves, cell: s.board[63], piece: s.tray[0]?.id }).toEqual({ score: 120, best: 5000, moves: 12, cell: 3, piece: 'L4-2' });
 });
 
 test('ships a web app manifest and service worker for offline play', async ({ page, request }) => {
@@ -228,5 +216,7 @@ test('ships a web app manifest and service worker for offline play', async ({ pa
   const manifest = await (await request.get(`/${manifestHref!.replace(/^\.\//, '')}`)).json();
   expect(manifest.name).toBe('Block Baster');
   expect(manifest.icons.length).toBeGreaterThanOrEqual(3);
-  expect((await request.get('/sw.js')).ok()).toBe(true);
+  const sw = await request.get('/sw.js');
+  expect(sw.ok()).toBe(true);
+  expect(await sw.text()).not.toContain('__BUILD__');
 });

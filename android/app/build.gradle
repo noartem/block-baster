@@ -1,9 +1,7 @@
-import groovy.json.JsonSlurper
-
 apply plugin: 'com.android.application'
 
-// Version name comes from package.json so web and Android builds share one version.
-def packageJson = new JsonSlurper().parse(file('../../package.json'))
+// Version name comes from Cargo.toml so every build of the game shares one version.
+def cargoVersion = (file('../../Cargo.toml').text =~ /(?m)^version\s*=\s*"([^"]+)"/)[0][1]
 def env = System.getenv()
 def hasReleaseKey = env.ANDROID_KEYSTORE_FILE && file(env.ANDROID_KEYSTORE_FILE).exists()
 
@@ -15,12 +13,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode((env.VERSION_CODE ?: "1") as int)
-        versionName packageJson.version
-        aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
-        }
+        versionName cargoVersion
     }
     signingConfigs {
         // A fixed, public keystore so community builds can be installed over each other.
@@ -44,33 +37,24 @@ android {
         release {
             signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-}
-
-repositories {
-    flatDir{
-        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    packagingOptions {
+        // The library is already stripped of debug info by the release profile; keep it as is.
+        jniLibs.useLegacyPackaging = false
     }
 }
 
-dependencies {
-    implementation fileTree(include: ['*.jar'], dir: 'libs')
-    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
-    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
-    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-    implementation project(':capacitor-android')
-    implementation project(':capacitor-cordova-android-plugins')
+// Builds the game (Rust) for every Android ABI into src/main/jniLibs with cargo-ndk.
+// Skip with -PskipCargo when the libraries were built beforehand (as CI does).
+def abis = (project.findProperty('abis') ?: 'arm64-v8a,armeabi-v7a,x86_64').split(',')
+tasks.register('cargoBuild', Exec) {
+    workingDir file('../..')
+    def args = ['cargo', 'ndk', '--platform', "${rootProject.ext.minSdkVersion}", '-o', 'android/app/src/main/jniLibs']
+    abis.each { args += ['-t', it] }
+    args += ['build', '--lib', '--release']
+    commandLine args
 }
-
-apply from: 'capacitor.build.gradle'
-
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+if (!project.hasProperty('skipCargo')) {
+    preBuild.dependsOn cargoBuild
 }

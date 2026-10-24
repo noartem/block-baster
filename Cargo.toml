@@ -1,0 +1,98 @@
+[package]
+name = "block-baster"
+version = "1.0.0"
+edition = "2024"
+description = "Free, open-source, ad-free block puzzle game inspired by Block Blast"
+license = "MIT"
+repository = "https://github.com/noartem/block-baster"
+publish = false
+default-run = "block-baster"
+
+[lib]
+# cdylib: the Android NativeActivity library and the WebAssembly module; rlib: the desktop binary and tools.
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "block-baster"
+path = "src/main.rs"
+
+[dependencies]
+femtovg = { version = "0.27", default-features = false, features = ["textlayout"] }
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cpal = "0.18"
+raw-window-handle = "0.6"
+
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
+winit = { version = "0.30", default-features = false, features = ["rwh_06", "x11", "wayland", "wayland-dlopen"] }
+glutin = { version = "0.32", default-features = false, features = ["egl", "glx", "x11", "wayland", "wgl"] }
+glutin-winit = { version = "0.5", default-features = false, features = ["egl", "glx", "x11", "wayland", "wgl"] }
+# PNG output for the asset generator and screenshot tools.
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
+png = "0.18"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Reads the saves of the earlier WebView-based app once (see src/platform/legacy.rs).
+rusty-leveldb = { version = "4", default-features = false, features = ["fs"] }
+winit = { version = "0.30", default-features = false, features = ["rwh_06", "android-native-activity"] }
+glutin = { version = "0.32", default-features = false, features = ["egl"] }
+glutin-winit = { version = "0.5", default-features = false, features = ["egl"] }
+jni = "0.21"
+ndk-context = "0.1"
+android_logger = "0.15"
+log = "0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cpal = { version = "0.18", features = ["wasm-bindgen"] }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = [
+  "AddEventListenerOptions",
+  "CssStyleDeclaration",
+  "Document",
+  "DomRect",
+  "DomStringMap",
+  "Element",
+  "Event",
+  "EventTarget",
+  "HtmlCanvasElement",
+  "HtmlElement",
+  "HtmlMetaElement",
+  "KeyboardEvent",
+  "Location",
+  "MediaQueryList",
+  "Navigator",
+  "Performance",
+  "PointerEvent",
+  "ResizeObserver",
+  "Storage",
+  "UrlSearchParams",
+  "VisibilityState",
+  "WebGl2RenderingContext",
+  "WheelEvent",
+  "Window",
+] }
+
+[dev-dependencies]
+rusty-leveldb = { version = "4", default-features = false, features = ["fs"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+panic = "abort"
+strip = "debuginfo"
+
+[profile.dev]
+# The sprite rasteriser and the synth are far too slow unoptimised.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[workspace]
+exclude = ["promo"]
