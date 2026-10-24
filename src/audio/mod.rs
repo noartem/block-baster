@@ -3,6 +3,9 @@
 //! app's handle: it owns the output device and shares the [`Engine`] with the
 //! audio callback.
 //!
+//! Both the effects and the music take on the visual style: the tier's material
+//! picks the instruments, the palette colours them (see [`timbre`]).
+//!
 //! Browsers only allow audio after a user gesture, so nothing touches the
 //! device until [`Audio::unlock`]. Without a device (CI, headless machines)
 //! everything keeps working silently, and the intensity tracker still follows
@@ -14,12 +17,14 @@ pub mod intensity;
 pub mod music;
 pub mod output;
 pub mod sound;
+pub mod timbre;
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
 pub use crate::styles::{SoundProfile, Wave};
 pub use engine::Engine;
 pub use intensity::MusicState;
+pub use timbre::SoundStyle;
 
 use intensity::IntensityTracker;
 
@@ -48,7 +53,8 @@ pub struct Audio {
     suspended: bool,
     sound_level: f32,
     music_level: f32,
-    profile: SoundProfile,
+    /// Style tier level and palette variant.
+    style: (usize, usize),
     music_on: bool,
     paused: bool,
     tracker: IntensityTracker,
@@ -71,7 +77,7 @@ impl Audio {
             suspended: false,
             sound_level: 1.0,
             music_level: 1.0,
-            profile: crate::styles::default_sound_profile(),
+            style: (0, 0),
             music_on: false,
             paused: false,
             tracker: IntensityTracker::new(),
@@ -89,11 +95,12 @@ impl Audio {
     pub fn unlock(&mut self) {
         if self.output.is_none() && !self.failed {
             let (sound, music, state) = (self.sound_level, self.music_level, self.tracker.state);
-            let (music_on, paused) = (self.music_on, self.paused);
+            let (music_on, paused, style) = (self.music_on, self.paused, self.style);
             let opened = output::Output::open(|sample_rate| {
                 let mut e = Engine::new(sample_rate, crate::platform::time_seed());
                 e.init_sound_volume(sound);
                 e.set_music_state(state);
+                e.set_style(style.0, style.1);
                 if music_on {
                     e.start_music(music, paused);
                 }
@@ -161,9 +168,22 @@ impl Audio {
         self.music_level
     }
 
-    /// The style tier's sound profile, used by the following effects.
-    pub fn set_profile(&mut self, p: SoundProfile) {
-        self.profile = p;
+    /// Switches the sound to a style: its tier level picks the instruments, its
+    /// palette variant colours them. The effects follow right away, the music
+    /// at its next bar (without restarting).
+    pub fn set_style(&mut self, tier: usize, variant: usize) {
+        if self.style == (tier, variant) {
+            return;
+        }
+        self.style = (tier, variant);
+        if let Some(mut e) = self.engine() {
+            e.set_style(tier, variant);
+        }
+    }
+
+    /// Style tier level and palette variant of the sound.
+    pub fn style(&self) -> (usize, usize) {
+        self.style
     }
 
     /// Plays an effect; silently ignored while locked, suspended or at volume 0.
@@ -171,9 +191,8 @@ impl Audio {
         if self.sound_level <= 0.0 || self.suspended {
             return;
         }
-        let profile = self.profile;
         if let Some(mut e) = self.engine() {
-            e.play(sfx, &profile);
+            e.play(sfx);
         }
     }
 

@@ -104,10 +104,53 @@ pub struct Effects {
     pub fireworks: u32,
 }
 
+/// What a tier sounds like it is made of: picks the instruments of its sound
+/// effects (placing a cardboard block thumps, a wooden one knocks, an iron one
+/// clanks) and of its music (felt piano, marimba, music box, bells, synths…).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Material {
+    Classic,
+    Cardboard,
+    Candy,
+    Gingerbread,
+    Wood,
+    Gem,
+    Iron,
+    Neon,
+    Glass,
+    Royal,
+}
+
+/// Harmony of the music: three progressions over the same 8-bar form.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Mode {
+    /// The original jazzy D dorian progression (Dm9, G13, C^9, Am9…).
+    Dorian,
+    /// Darker, in A minor (Am9, F^9, Dm9, E7b9…).
+    Minor,
+    /// Brighter, in C major (C^9, Am9, F^9, G13…).
+    Major,
+}
+
+/// How a palette colours the sound of its tier: subtle, so the three palettes
+/// of a tier are told apart but clearly belong together.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tint {
+    /// Transposition of the music and the effects, in semitones.
+    pub transpose: i8,
+    pub mode: Mode,
+    /// Brightness: filter cutoffs of the instruments scale by this (1 = as designed).
+    pub tone: f32,
+}
+
+const fn tint(transpose: i8, mode: Mode, tone: f32) -> Tint {
+    Tint { transpose, mode, tone }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SoundProfile {
-    /// Waveform of the line-clear arpeggio.
-    pub lead: Wave,
+    /// The instruments of the effects and the music.
+    pub material: Material,
     /// Root note of the arpeggio in Hz.
     pub root: f32,
     /// Arpeggio steps in semitones.
@@ -120,6 +163,8 @@ pub struct SoundProfile {
     pub pad: bool,
     /// Pitch of the placement thud in Hz.
     pub thud: f32,
+    /// How each palette colours the sound, in the order of the tier's `variants`.
+    pub tints: [Tint; 3],
 }
 
 #[derive(Debug)]
@@ -214,13 +259,6 @@ pub fn group_digits(n: u32) -> String {
     out
 }
 
-const CLASSIC_DEFAULT: SoundProfile = TIERS[0].sound;
-
-/// The sound profile used before any style is applied.
-pub fn default_sound_profile() -> SoundProfile {
-    CLASSIC_DEFAULT
-}
-
 pub static TIERS: [Tier; 10] = [
     Tier {
         level: 0,
@@ -232,7 +270,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: false,
         text_gradient: false,
         fx: Effects { particles: 4, shape: ParticleShape::Square, glow: false, gravity: 900.0, ring: false, beam: false, sparkle: 0.0, flash: Rgb::hex("#ffffff"), shake: 1.0, fireworks: 0 },
-        sound: SoundProfile { lead: Wave::Square, root: 392.0, scale: &[0.0, 4.0, 7.0, 12.0, 16.0, 19.0, 24.0], echo: 0.0, bell: false, pad: false, thud: 180.0 },
+        sound: SoundProfile { material: Material::Classic, root: 392.0, scale: &[0.0, 4.0, 7.0, 12.0, 16.0, 19.0, 24.0], echo: 0.0, bell: false, pad: false, thud: 180.0, tints: [tint(0, Mode::Dorian, 1.0), tint(-2, Mode::Minor, 0.85), tint(2, Mode::Major, 1.1)] },
         variants: [
             Palette {
                 name: "Lagoon",
@@ -288,7 +326,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: false,
         text_gradient: false,
         fx: Effects { particles: 5, shape: ParticleShape::Square, glow: false, gravity: 1100.0, ring: false, beam: false, sparkle: 0.1, flash: Rgb::hex("#fff3dc"), shake: 1.0, fireworks: 2 },
-        sound: SoundProfile { lead: Wave::Sine, root: 329.63, scale: &[0.0, 3.0, 5.0, 7.0, 10.0, 12.0, 15.0], echo: 0.0, bell: false, pad: false, thud: 140.0 },
+        sound: SoundProfile { material: Material::Cardboard, root: 329.63, scale: &[0.0, 3.0, 5.0, 7.0, 10.0, 12.0, 15.0], echo: 0.0, bell: false, pad: false, thud: 140.0, tints: [tint(0, Mode::Dorian, 1.0), tint(3, Mode::Major, 1.1), tint(-2, Mode::Minor, 0.85)] },
         variants: [
             Palette {
                 name: "Moving Day",
@@ -344,7 +382,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: false,
         text_gradient: false,
         fx: Effects { particles: 6, shape: ParticleShape::Circle, glow: false, gravity: 700.0, ring: true, beam: false, sparkle: 0.25, flash: Rgb::hex("#ffffff"), shake: 1.0, fireworks: 3 },
-        sound: SoundProfile { lead: Wave::Triangle, root: 440.0, scale: &[0.0, 2.0, 4.0, 7.0, 9.0, 12.0, 14.0, 16.0], echo: 0.15, bell: true, pad: false, thud: 220.0 },
+        sound: SoundProfile { material: Material::Candy, root: 440.0, scale: &[0.0, 2.0, 4.0, 7.0, 9.0, 12.0, 14.0, 16.0], echo: 0.15, bell: true, pad: false, thud: 220.0, tints: [tint(2, Mode::Major, 1.0), tint(0, Mode::Dorian, 1.1), tint(5, Mode::Major, 1.15)] },
         variants: [
             Palette {
                 name: "Bubblegum",
@@ -400,7 +438,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: false,
         text_gradient: false,
         fx: Effects { particles: 6, shape: ParticleShape::Circle, glow: false, gravity: 650.0, ring: true, beam: false, sparkle: 0.4, flash: Rgb::hex("#fff8e8"), shake: 1.0, fireworks: 4 },
-        sound: SoundProfile { lead: Wave::Triangle, root: 523.25, scale: &[0.0, 2.0, 4.0, 7.0, 9.0, 12.0, 16.0, 19.0], echo: 0.2, bell: true, pad: false, thud: 200.0 },
+        sound: SoundProfile { material: Material::Gingerbread, root: 523.25, scale: &[0.0, 2.0, 4.0, 7.0, 9.0, 12.0, 16.0, 19.0], echo: 0.2, bell: true, pad: false, thud: 200.0, tints: [tint(0, Mode::Major, 1.0), tint(2, Mode::Dorian, 1.1), tint(-3, Mode::Minor, 0.9)] },
         variants: [
             Palette {
                 name: "Christmas Eve",
@@ -456,7 +494,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: false,
         text_gradient: false,
         fx: Effects { particles: 6, shape: ParticleShape::Diamond, glow: false, gravity: 850.0, ring: true, beam: false, sparkle: 0.15, flash: Rgb::hex("#fff4dc"), shake: 1.2, fireworks: 4 },
-        sound: SoundProfile { lead: Wave::Triangle, root: 392.0, scale: &[0.0, 2.0, 4.0, 7.0, 9.0, 12.0, 14.0, 16.0], echo: 0.1, bell: false, pad: false, thud: 165.0 },
+        sound: SoundProfile { material: Material::Wood, root: 392.0, scale: &[0.0, 2.0, 4.0, 7.0, 9.0, 12.0, 14.0, 16.0], echo: 0.1, bell: false, pad: false, thud: 165.0, tints: [tint(0, Mode::Dorian, 1.0), tint(-2, Mode::Minor, 0.85), tint(3, Mode::Major, 1.1)] },
         variants: [
             Palette {
                 name: "Oak Workshop",
@@ -512,7 +550,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: true,
         text_gradient: false,
         fx: Effects { particles: 6, shape: ParticleShape::Diamond, glow: true, gravity: 600.0, ring: true, beam: true, sparkle: 0.3, flash: Rgb::hex("#ffffff"), shake: 1.1, fireworks: 4 },
-        sound: SoundProfile { lead: Wave::Sine, root: 523.25, scale: &[0.0, 4.0, 7.0, 11.0, 12.0, 16.0, 19.0, 23.0], echo: 0.25, bell: true, pad: false, thud: 200.0 },
+        sound: SoundProfile { material: Material::Gem, root: 523.25, scale: &[0.0, 4.0, 7.0, 11.0, 12.0, 16.0, 19.0, 23.0], echo: 0.25, bell: true, pad: false, thud: 200.0, tints: [tint(-2, Mode::Minor, 0.95), tint(0, Mode::Dorian, 1.05), tint(3, Mode::Major, 1.1)] },
         variants: [
             Palette {
                 name: "Ruby Cave",
@@ -568,7 +606,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: true,
         text_gradient: false,
         fx: Effects { particles: 7, shape: ParticleShape::Spark, glow: true, gravity: 900.0, ring: true, beam: false, sparkle: 0.55, flash: Rgb::hex("#ffe6c2"), shake: 1.5, fireworks: 5 },
-        sound: SoundProfile { lead: Wave::Sine, root: 440.0, scale: &[0.0, 5.0, 7.0, 12.0, 17.0, 19.0, 24.0, 29.0], echo: 0.3, bell: true, pad: false, thud: 95.0 },
+        sound: SoundProfile { material: Material::Iron, root: 440.0, scale: &[0.0, 5.0, 7.0, 12.0, 17.0, 19.0, 24.0, 29.0], echo: 0.3, bell: true, pad: false, thud: 95.0, tints: [tint(-2, Mode::Minor, 1.0), tint(-4, Mode::Dorian, 0.85), tint(0, Mode::Minor, 1.15)] },
         variants: [
             Palette {
                 name: "Foundry",
@@ -624,7 +662,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: true,
         text_gradient: false,
         fx: Effects { particles: 7, shape: ParticleShape::Spark, glow: true, gravity: 300.0, ring: true, beam: true, sparkle: 0.3, flash: Rgb::hex("#ffffff"), shake: 1.4, fireworks: 5 },
-        sound: SoundProfile { lead: Wave::Sawtooth, root: 220.0, scale: &[0.0, 3.0, 5.0, 7.0, 10.0, 12.0, 15.0, 17.0], echo: 0.35, bell: false, pad: true, thud: 120.0 },
+        sound: SoundProfile { material: Material::Neon, root: 220.0, scale: &[0.0, 3.0, 5.0, 7.0, 10.0, 12.0, 15.0, 17.0], echo: 0.35, bell: false, pad: true, thud: 120.0, tints: [tint(-3, Mode::Minor, 1.0), tint(0, Mode::Dorian, 1.15), tint(2, Mode::Major, 0.9)] },
         variants: [
             Palette {
                 name: "Synthwave",
@@ -680,7 +718,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: true,
         text_gradient: false,
         fx: Effects { particles: 8, shape: ParticleShape::Star, glow: true, gravity: 180.0, ring: true, beam: true, sparkle: 0.45, flash: Rgb::hex("#ffffff"), shake: 1.4, fireworks: 6 },
-        sound: SoundProfile { lead: Wave::Sine, root: 349.23, scale: &[0.0, 2.0, 4.0, 6.0, 7.0, 9.0, 11.0, 12.0, 14.0], echo: 0.45, bell: true, pad: true, thud: 160.0 },
+        sound: SoundProfile { material: Material::Glass, root: 349.23, scale: &[0.0, 2.0, 4.0, 6.0, 7.0, 9.0, 11.0, 12.0, 14.0], echo: 0.45, bell: true, pad: true, thud: 160.0, tints: [tint(2, Mode::Major, 1.0), tint(5, Mode::Major, 1.15), tint(-2, Mode::Dorian, 0.9)] },
         variants: [
             Palette {
                 name: "Borealis",
@@ -736,7 +774,7 @@ pub static TIERS: [Tier; 10] = [
         text_glow: true,
         text_gradient: true,
         fx: Effects { particles: 10, shape: ParticleShape::Star, glow: true, gravity: 500.0, ring: true, beam: true, sparkle: 0.5, flash: Rgb::hex("#fff1a8"), shake: 1.6, fireworks: 9 },
-        sound: SoundProfile { lead: Wave::Triangle, root: 261.63, scale: &[0.0, 4.0, 7.0, 12.0, 16.0, 19.0, 24.0, 28.0], echo: 0.4, bell: true, pad: true, thud: 140.0 },
+        sound: SoundProfile { material: Material::Royal, root: 261.63, scale: &[0.0, 4.0, 7.0, 12.0, 16.0, 19.0, 24.0, 28.0], echo: 0.4, bell: true, pad: true, thud: 140.0, tints: [tint(0, Mode::Major, 1.0), tint(2, Mode::Dorian, 1.1), tint(-2, Mode::Minor, 1.0)] },
         variants: [
             Palette {
                 name: "Golden Throne",
@@ -819,6 +857,16 @@ mod tests {
     fn gives_every_tier_its_own_blocks_and_frame() {
         assert_eq!(TIERS.iter().map(|t| t.block).collect::<HashSet<_>>().len(), TIERS.len());
         assert_eq!(TIERS.iter().map(|t| t.frame).collect::<HashSet<_>>().len(), TIERS.len());
+    }
+
+    #[test]
+    fn gives_every_tier_its_own_material_and_every_palette_its_own_tint() {
+        assert_eq!(TIERS.iter().map(|t| t.sound.material).collect::<HashSet<_>>().len(), TIERS.len());
+        assert_eq!(TIERS[0].sound.material, Material::Classic);
+        for t in &TIERS {
+            let [a, b, c] = t.sound.tints;
+            assert!(a != b && b != c && a != c, "{}", t.name);
+        }
     }
 
     #[test]
