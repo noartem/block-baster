@@ -44,6 +44,10 @@ interface BBState {
   overlay: 'none' | 'menu' | 'gameover';
   record: boolean;
   helpOpen: boolean;
+  /** Tray slot of the piece being dragged. */
+  dragging: number | null;
+  scroll: number;
+  canScroll: boolean;
   /** The open card is still popping in. */
   popping: boolean;
   music: { playing: boolean; bpm: number; e: number; volume: number };

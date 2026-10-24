@@ -274,6 +274,10 @@ pub fn start() -> Result<(), JsValue> {
     listen(target, "pointerdown", move |e: PointerEvent| {
         with_shell(|s| {
             e.prevent_default();
+            // Only the main mouse button drags; right and middle clicks do nothing.
+            if e.pointer_type() == "mouse" && e.button() != 0 {
+                return;
+            }
             // Synthetic or already-released pointers can't be captured; dragging still works.
             let _ = s.element.set_pointer_capture(e.pointer_id());
             let (x, y) = s.point(&e);
@@ -296,9 +300,21 @@ pub fn start() -> Result<(), JsValue> {
     listen(target, "pointercancel", move |e: PointerEvent| {
         with_shell(|s| s.app.pointer_cancel(e.pointer_id() as u64));
     });
+    // Losing the capture without a pointerup (the browser took over the gesture) ends the drag;
+    // after a normal release this finds nothing to cancel.
+    listen(target, "lostpointercapture", move |e: PointerEvent| {
+        with_shell(|s| s.app.pointer_cancel(e.pointer_id() as u64));
+    });
     listen(target, "contextmenu", move |e: web_sys::Event| e.prevent_default());
     listen(target, "wheel", move |e: WheelEvent| {
-        with_shell(|s| s.app.wheel(e.delta_y() as f32));
+        e.prevent_default();
+        // Firefox reports mouse wheels in lines, some devices in pages.
+        let unit = match e.delta_mode() {
+            WheelEvent::DOM_DELTA_LINE => 40.0,
+            WheelEvent::DOM_DELTA_PAGE => window().inner_height().ok().and_then(|h| h.as_f64()).unwrap_or(800.0) * 0.8,
+            _ => 1.0,
+        };
+        with_shell(|s| s.app.wheel((e.delta_y() * unit) as f32));
     });
     let win: web_sys::EventTarget = window().into();
     listen(&win, "keydown", move |e: KeyboardEvent| {
@@ -308,6 +324,10 @@ pub fn start() -> Result<(), JsValue> {
     });
     listen(&win, "resize", move |_: web_sys::Event| {
         with_shell(|s| s.resize());
+    });
+    // Switching away mid-drag may swallow the pointerup: drop what was held.
+    listen(&win, "blur", move |_: web_sys::Event| {
+        with_shell(|s| s.app.cancel_input());
     });
     listen(&win, "pagehide", move |_: web_sys::Event| {
         with_shell(|s| s.app.save());
@@ -372,6 +392,9 @@ fn state(app: &mut App) -> Value {
         "overlay": match app.overlay() { Overlay::None => "none", Overlay::Menu => "menu", Overlay::GameOver => "gameover" },
         "record": app.ui.game_over.as_ref().is_some_and(|g| g.record),
         "helpOpen": app.ui.help_open,
+        "dragging": app.dragging(),
+        "scroll": app.ui.scroll,
+        "canScroll": app.ui.can_scroll(),
         "popping": app.ui.popping(app.now()),
         "music": { "playing": app.audio.music_playing(), "bpm": music.bpm, "e": music.e, "volume": app.audio.music_volume() },
         "soundVolume": app.audio.sound_volume(),

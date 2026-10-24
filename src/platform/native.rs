@@ -274,7 +274,12 @@ impl<H: Host> ApplicationHandler for Shell<H> {
                 Key::Named(NamedKey::BrowserBack | NamedKey::GoBack) => self.app.back_button(),
                 _ => {}
             },
-            WindowEvent::Focused(false) => self.app.save(),
+            WindowEvent::Focused(false) => {
+                // A release while another window has focus may never arrive.
+                self.mouse_down = false;
+                self.app.cancel_input();
+                self.app.save();
+            }
             _ => {}
         }
     }

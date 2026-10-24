@@ -72,7 +72,8 @@ struct DragState {
 
 /// A pointer held down on the menus.
 enum UiPress {
-    Button(UiId),
+    /// A button held down; y where the press started.
+    Button(UiId, f32),
     Slider(SettingKey),
     /// Dragging the card to scroll it; last y.
     Scroll(f32),
@@ -88,6 +89,8 @@ enum GameOverStage {
 }
 
 const PICKUP_MS: f64 = 110.0;
+/// How far (px) a press on a button may move before it scrolls the card instead.
+const SCROLL_SLOP: f32 = 10.0;
 /// Hard caps on effect particles, so even a huge clear stays cheap on phones.
 const MAX_DEBRIS: usize = 40;
 const MAX_PARTICLES: usize = 700;
@@ -467,7 +470,8 @@ impl App {
 
     pub fn pointer_down(&mut self, id: u64, kind: PointerKind, x: f32, y: f32) {
         self.unlock_audio();
-        if self.ui_press.is_some() {
+        // One pointer at a time: a second finger neither presses buttons nor grabs another piece.
+        if self.ui_press.is_some() || self.drag.is_some() {
             return;
         }
         if let Some(hit) = self.ui.hit_at(x, y) {
@@ -480,14 +484,14 @@ impl App {
                 UiId::Backdrop => UiPress::Backdrop,
                 id => {
                     self.ui.pressed = Some(id);
-                    UiPress::Button(id)
+                    UiPress::Button(id, y)
                 }
             };
             self.ui_press = Some((id, press));
             self.dirty = true;
             return;
         }
-        if self.ui.overlay != Overlay::None || self.drag.is_some() || self.locked || self.game.over {
+        if self.ui.overlay != Overlay::None || self.locked || self.game.over {
             return;
         }
         let Some(slot) = self.layout.slot_at(x, y) else { return };
@@ -529,10 +533,17 @@ impl App {
                     *last = y;
                     self.ui.scroll_by(dy);
                 }
-                UiPress::Button(b) => {
-                    // The button stays pressed only while the pointer is over it.
-                    let over = self.ui.hit_at(x, y) == Some(*b);
-                    self.ui.pressed = if over { Some(*b) } else { None };
+                UiPress::Button(b, y0) => {
+                    if *b != UiId::MenuButton && self.ui.can_scroll() && (y - *y0).abs() > SCROLL_SLOP {
+                        // A drag that starts on a button scrolls the card instead.
+                        self.ui.scroll_by(*y0 - y);
+                        *press = UiPress::Scroll(y);
+                        self.ui.pressed = None;
+                    } else {
+                        // The button stays pressed only while the pointer is over it.
+                        let over = self.ui.hit_at(x, y) == Some(*b);
+                        self.ui.pressed = if over { Some(*b) } else { None };
+                    }
                 }
                 UiPress::Backdrop => {}
             }
@@ -564,7 +575,7 @@ impl App {
             let (_, press) = self.ui_press.take().expect("press");
             self.ui.pressed = None;
             match press {
-                UiPress::Button(b) => {
+                UiPress::Button(b, _) => {
                     if self.ui.hit_at(x, y) == Some(b) {
                         self.activate(b);
                     }
@@ -596,6 +607,17 @@ impl App {
         }
         if self.drag.as_ref().is_some_and(|d| d.pointer == id) {
             self.drop_piece(true);
+        }
+    }
+
+    /// Drops any press or drag in progress: the window lost focus, the app was hidden or an
+    /// overlay opened. A dragged piece flies back to the tray.
+    pub fn cancel_input(&mut self) {
+        if let Some((id, _)) = self.ui_press {
+            self.pointer_cancel(id);
+        }
+        if let Some(id) = self.drag.as_ref().map(|d| d.pointer) {
+            self.pointer_cancel(id);
         }
     }
 
@@ -1171,6 +1193,7 @@ impl App {
 
     pub fn open_menu(&mut self) {
         if self.ui.overlay == Overlay::None {
+            self.cancel_input();
             self.ui.open(Overlay::Menu, self.now);
             self.sync_music_pause();
             self.dirty = true;
@@ -1179,6 +1202,7 @@ impl App {
 
     pub fn close_menu(&mut self) {
         if self.ui.overlay == Overlay::Menu {
+            self.cancel_input();
             self.ui.close();
             self.sync_music_pause();
             self.dirty = true;
@@ -1271,9 +1295,15 @@ impl App {
             self.audio.resume();
             self.dirty = true;
         } else {
+            self.cancel_input();
             self.save();
             self.audio.suspend();
         }
+    }
+
+    /// The tray slot of the piece being dragged.
+    pub fn dragging(&self) -> Option<usize> {
+        self.drag.as_ref().map(|d| d.slot)
     }
 
     /// The frame clock as of the last tick, in ms.
