@@ -31,8 +31,8 @@ The game ends when nothing fits.
 - 🍀 **Lucky sets**: some sets glow in the tray; they are picked to clear lines and free up room. At first every set is lucky, then every 2nd from 3k points and every 3rd from 40k (never rarer). Once the board is 45% full the next set is always lucky and clears a line whenever any piece can
 - 🧩 **Gentle difficulty**: small, friendly pieces come most often; big squares, long bars and big corners stay rare and only slowly get more common as your score grows
 - 💥 Juicy effects, synthesized sounds and haptics
-- 🎵 Music that plays along: calm lofi at the start, building up to EDM as your score grows and you play faster
-- ✨ Ten style levels (Classic, Cardboard, Candy, Gingerbread, Wooden, Gems, Iron, Neon, Aurora, Legendary) unlocked at 5k, 12k, 25k, 40k, 60k, 90k, 130k, 200k and 350k points, each with new blocks, effects, fonts and sounds; clearing the whole board switches the colours
+- 🎵 Music that plays along: calm lofi at the start, building up to EDM as your score grows and you play faster, on instruments that suit each style (felt piano for Cardboard, music box for Gingerbread, synths for Neon, harpsichord and brass for Legendary…)
+- ✨ Ten style levels (Classic, Cardboard, Candy, Gingerbread, Wooden, Gems, Iron, Neon, Aurora, Legendary) unlocked at 5k, 12k, 25k, 40k, 60k, 90k, 130k, 200k and 350k points, each with new blocks (in several variations, so no two boxes or planks look alike), effects, fonts and sounds; clearing the whole board switches the colours
 - 💾 Your game and best score are saved automatically
 - 📴 Works offline: native apps for Android and the desktop, and an installable web version
 - 🚫 No ads, no tracking, no network needed

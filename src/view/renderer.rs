@@ -44,8 +44,8 @@ pub fn tray_piece_position(layout: &Layout, slot: usize, shape: &Shape) -> (f32,
 
 pub struct Renderer {
     pub fonts: Fonts,
-    /// Blocks of every size are drawn from one sprite per colour at board-cell size.
-    sprites: HashMap<u8, ImageId>,
+    /// Blocks of every size are drawn from one sprite per colour and look at board-cell size.
+    sprites: HashMap<(u8, u8), ImageId>,
     sprite_key: (String, u32),
     board: Option<(String, ImageId)>,
     sprite_size: f32,
@@ -184,20 +184,20 @@ impl Renderer {
         }
         if let Some(d) = &scene.drag {
             self.draw_drag_halo(c, scene, d);
-            self.draw_piece(c, d.piece.shape, d.piece.color, d.x, d.y, d.cell, 1.0, true);
+            self.draw_piece(c, d.piece.shape, d.piece.color, scene.tray_looks[d.slot], d.x, d.y, d.cell, 1.0, true);
         }
         self.draw_game_over_shade(c, scene);
         self.draw_texts(c, scene);
         self.draw_pulse(c, scene);
     }
 
-    fn sprite(&mut self, c: &mut Canvas, color: u8) -> Option<ImageId> {
-        if let Some(id) = self.sprites.get(&color) {
+    fn sprite(&mut self, c: &mut Canvas, color: u8, look: u8) -> Option<ImageId> {
+        if let Some(id) = self.sprites.get(&(color, look)) {
             return Some(*id);
         }
-        let pm = sprites::block_sprite(self.style.tier.block, self.style.color(color), self.sprite_key.1);
+        let pm = sprites::block_sprite(self.style.tier.block, self.style.color(color), self.sprite_key.1, look);
         let id = upload(c, &pm)?;
-        self.sprites.insert(color, id);
+        self.sprites.insert((color, look), id);
         Some(id)
     }
 
@@ -230,6 +230,7 @@ impl Renderer {
         let target = drag.and_then(|d| d.target.as_ref());
         let mut highlight = [false; SIZE * SIZE];
         let mut ghost = [false; SIZE * SIZE];
+        let mut ghost_look = [0u8; SIZE * SIZE];
         if let (Some(d), Some((tr, tc, lines))) = (drag, target) {
             for &r in &lines.rows {
                 for col in 0..SIZE {
@@ -241,8 +242,10 @@ impl Renderer {
                     highlight[idx(r, col)] = true;
                 }
             }
-            for &(dr, dc) in &d.piece.shape.cells {
-                ghost[idx((tr + dr) as usize, (tc + dc) as usize)] = true;
+            for (k, &(dr, dc)) in d.piece.shape.cells.iter().enumerate() {
+                let i = idx((tr + dr) as usize, (tc + dc) as usize);
+                ghost[i] = true;
+                ghost_look[i] = piece_look(scene.tray_looks[d.slot], k);
             }
         }
 
@@ -260,7 +263,8 @@ impl Renderer {
                     && (color != 0 || ghost[i])
                 {
                     // Blocks in lines about to be cleared take the colour of the dragged piece.
-                    self.blit(c, d.piece.color, x, y, cell, 1.0, 1.0, 1.0);
+                    let look = if ghost[i] { ghost_look[i] } else { scene.looks[i] };
+                    self.blit(c, d.piece.color, look, x, y, cell, 1.0, 1.0, 1.0);
                     continue;
                 }
                 if color == 0 {
@@ -268,7 +272,7 @@ impl Renderer {
                     if let Some(d) = drag
                         && ghost[i]
                     {
-                        self.blit(c, d.piece.color, x, y, cell, 0.32 + 0.14 * breath, 1.0, 1.0);
+                        self.blit(c, d.piece.color, ghost_look[i], x, y, cell, 0.32 + 0.14 * breath, 1.0, 1.0);
                     }
                     continue;
                 }
@@ -303,7 +307,7 @@ impl Renderer {
                         sy = sx;
                     }
                 }
-                self.blit(c, color, x, y + dy, cell, 1.0, sx, sy);
+                self.blit(c, color, scene.looks[i], x, y + dy, cell, 1.0, sx, sy);
                 if impact > 0.0 {
                     draw::fill_color(c, &round_rect(x + cell * 0.1, y + dy + cell * 0.1, cell * 0.8, cell * 0.8, cell * 0.14), white(0.5 * impact));
                 }
@@ -320,7 +324,7 @@ impl Renderer {
                 let x = layout.board_x + cc.c as f32 * cell;
                 let y = layout.board_y + cc.r as f32 * cell;
                 let scale = if t < 0.25 { 1.0 + t * 0.6 } else { 1.15 * (1.0 - ease_out_cubic((t - 0.25) / 0.75)) };
-                self.blit(c, cc.color, x, y, cell, 1.0 - t * 0.3, scale, scale);
+                self.blit(c, cc.color, cc.look, x, y, cell, 1.0 - t * 0.3, scale, scale);
                 if t < 0.3 {
                     fill_rect(c, x + cell * 0.08, y + cell * 0.08, cell * 0.84, cell * 0.84, flash.alpha(0.7 * (1.0 - t / 0.3)));
                 }
@@ -331,8 +335,8 @@ impl Renderer {
     /// Draws one block. Animated pieces change size every frame; caching a sprite per size
     /// would create hundreds of images, so they all scale the board-sized one.
     #[allow(clippy::too_many_arguments)]
-    fn blit(&mut self, c: &mut Canvas, color: u8, x: f32, y: f32, size: f32, alpha: f32, scale: f32, scale_y: f32) {
-        let Some(id) = self.sprite(c, color) else { return };
+    fn blit(&mut self, c: &mut Canvas, color: u8, look: u8, x: f32, y: f32, size: f32, alpha: f32, scale: f32, scale_y: f32) {
+        let Some(id) = self.sprite(c, color, look) else { return };
         let w = size * scale;
         let h = size * scale_y;
         if w <= 0.0 || h <= 0.0 || alpha <= 0.0 {
@@ -343,7 +347,8 @@ impl Renderer {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_piece(&mut self, c: &mut Canvas, shape: &Shape, color: u8, x: f32, y: f32, cell: f32, alpha: f32, shadow: bool) {
+    /// Draws a piece whose block looks were seeded with `looks` (see [`piece_look`]).
+    pub fn draw_piece(&mut self, c: &mut Canvas, shape: &Shape, color: u8, looks: u32, x: f32, y: f32, cell: f32, alpha: f32, shadow: bool) {
         if shadow {
             let mut p = Path::new();
             for &(r, col) in &shape.cells {
@@ -351,8 +356,8 @@ impl Renderer {
             }
             c.fill_path(&p, &Paint::color(black(0.18)).with_anti_alias(false));
         }
-        for &(r, col) in &shape.cells {
-            self.blit(c, color, x + col as f32 * cell, y + r as f32 * cell, cell, alpha, 1.0, 1.0);
+        for (k, &(r, col)) in shape.cells.iter().enumerate() {
+            self.blit(c, color, piece_look(looks, k), x + col as f32 * cell, y + r as f32 * cell, cell, alpha, 1.0, 1.0);
         }
     }
 
@@ -380,7 +385,7 @@ impl Renderer {
         }
         for &(piece, i, offset, alpha) in &shown {
             let (x, y, cell) = tray_piece_position(layout, i, piece.shape);
-            self.draw_piece(c, piece.shape, if scene.playable[i] { piece.color } else { 0 }, x + offset, y, cell, alpha, false);
+            self.draw_piece(c, piece.shape, if scene.playable[i] { piece.color } else { 0 }, scene.tray_looks[i], x + offset, y, cell, alpha, false);
             if scene.lucky && scene.playable[i] {
                 self.draw_lucky_shine(c, scene, piece.shape, i, x + offset, y, cell);
             }
@@ -426,7 +431,7 @@ impl Renderer {
     fn draw_flying(&mut self, c: &mut Canvas, scene: &Scene, f: &FlyingPiece) {
         let (tx, ty, tc) = tray_piece_position(&scene.layout, f.slot, f.piece.shape);
         let t = ease_out_cubic(clamp01(((scene.now - f.start) / f.duration) as f32));
-        self.draw_piece(c, f.piece.shape, f.piece.color, lerp(f.from.0, tx, t), lerp(f.from.1, ty, t), lerp(f.from.2, tc, t), 1.0, false);
+        self.draw_piece(c, f.piece.shape, f.piece.color, scene.tray_looks[f.slot], lerp(f.from.0, tx, t), lerp(f.from.1, ty, t), lerp(f.from.2, tc, t), 1.0, false);
     }
 
     fn draw_particles(&mut self, c: &mut Canvas, scene: &Scene) {
@@ -514,11 +519,11 @@ impl Renderer {
                 draw::fill_color(c, &circle(x, y, r), color);
                 draw::fill_color(c, &circle(x, y, r * 0.55), color);
             }
-            ParticleKind::Block(block) => {
+            ParticleKind::Block(block, look) => {
                 // A chunk of a cleared block, tumbling away.
                 set_blend(c, false);
                 let s = p.size * (0.5 + 0.5 * k);
-                let Some(id) = self.sprite(c, block) else { return };
+                let Some(id) = self.sprite(c, block, look) else { return };
                 c.save();
                 c.translate(x, y);
                 c.rotate(p.spin * age);

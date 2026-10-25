@@ -197,12 +197,20 @@ impl Ui {
             self.opened_at = now;
             self.scroll = 0.0;
             self.pressed = None;
+            // Hit areas of the old screen must not catch taps before the new one is drawn.
+            self.hits.clear();
         }
     }
 
     pub fn close(&mut self) {
         self.overlay = Overlay::None;
         self.pressed = None;
+        self.hits.clear();
+    }
+
+    /// The open card is taller than the screen and can be scrolled.
+    pub fn can_scroll(&self) -> bool {
+        self.overlay != Overlay::None && self.max_scroll > 0.0
     }
 
     /// True while an overlay is popping in.

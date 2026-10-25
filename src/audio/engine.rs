@@ -10,6 +10,7 @@ use super::dsp::{
 };
 use super::intensity::MusicState;
 use super::music::{MusicGraph, Sequencer};
+use super::timbre::{Fm, SoundStyle};
 use crate::game::rng::Rng;
 use crate::styles::Wave;
 
@@ -81,19 +82,44 @@ pub enum Source {
         detune: f64,
     },
     /// Two-operator FM: a sine carrier whose frequency is modulated by a sine
-    /// at the same frequency, `depth` Hz deep, plus a shared 5 Hz vibrato.
+    /// at `ratio` times its frequency, `depth` Hz deep, plus a 5 Hz vibrato
+    /// `vibrato` cents deep.
     Fm {
         phase: f64,
         mod_phase: f64,
         freq: f64,
+        ratio: f64,
         depth: Param,
         lfo_phase: f64,
+        vibrato: f64,
     },
     Noise {
         buf: NoiseBuf,
         pos: usize,
         looping: bool,
     },
+}
+
+impl Source {
+    /// An FM source playing `freq` Hz for a note struck at `t` seconds whose
+    /// voice starts at sample `first`: the depth starts at its index and settles.
+    pub fn fm(fm: &Fm, freq: f64, t: f64, first: u64, sr: f64) -> Source {
+        let d = freq * fm.index;
+        let mut depth = Param::starting_at(d as f32, sr, first);
+        depth.set_value_at(d, t);
+        depth.set_target_at(d * fm.settle_to, t, fm.settle);
+        // The vibrato LFO started with the note.
+        let lfo_phase = (VIBRATO_HZ * (first as f64 / sr - t)).rem_euclid(1.0);
+        Source::Fm {
+            phase: 0.0,
+            mod_phase: 0.0,
+            freq,
+            ratio: fm.ratio,
+            depth,
+            lfo_phase,
+            vibrato: fm.vibrato,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -119,9 +145,8 @@ impl VoiceFilter {
     }
 }
 
-/// Vibrato depth of the e-piano, in cents.
-const VIBRATO_CENTS: f64 = 8.0;
-const VIBRATO_HZ: f64 = 5.0;
+/// Rate of the FM vibrato.
+pub const VIBRATO_HZ: f64 = 5.0;
 
 /// One scheduled note: a source through an optional filter and a gain.
 #[derive(Clone, Debug)]
@@ -172,16 +197,21 @@ impl Voice {
                     phase,
                     mod_phase,
                     freq,
+                    ratio,
                     depth,
                     lfo_phase,
+                    vibrato,
                 } => {
                     let m = sin_turns(*mod_phase) as f64;
-                    advance(mod_phase, *freq * inv_sr);
-                    let cents = VIBRATO_CENTS * sin_turns(*lfo_phase) as f64;
-                    advance(lfo_phase, VIBRATO_HZ * inv_sr);
-                    // 2^(cents/1200), to second order (the vibrato is only a few cents).
-                    let x = cents * (std::f64::consts::LN_2 / 1200.0);
-                    let f = (*freq + depth.tick() as f64 * m) * (1.0 + x + 0.5 * x * x);
+                    advance(mod_phase, *freq * *ratio * inv_sr);
+                    let mut f = *freq + depth.tick() as f64 * m;
+                    if *vibrato != 0.0 {
+                        let cents = *vibrato * sin_turns(*lfo_phase) as f64;
+                        advance(lfo_phase, VIBRATO_HZ * inv_sr);
+                        // 2^(cents/1200), to second order (the vibrato is only a few cents).
+                        let x = cents * (std::f64::consts::LN_2 / 1200.0);
+                        f *= 1.0 + x + 0.5 * x * x;
+                    }
                     let s = sin_turns(*phase);
                     advance(phase, f * inv_sr);
                     s
@@ -304,6 +334,10 @@ pub struct Engine {
     sfx: SfxOut,
     pub(crate) music: MusicGraph,
     pub(crate) seq: Sequencer,
+    /// The style the effects play in (the music follows it at the next bar).
+    pub(crate) style: SoundStyle,
+    /// Level of the effect being scheduled (the style's trim for it).
+    pub(crate) sfx_gain: f64,
     bus: [[f32; QUANTUM]; BUSES],
     out: [[f32; QUANTUM]; 2],
 }
@@ -334,6 +368,8 @@ impl Engine {
             },
             music: MusicGraph::new(sr),
             seq: Sequencer::new(),
+            style: SoundStyle::default(),
+            sfx_gain: 1.0,
             bus: [[0.0; QUANTUM]; BUSES],
             out: [[0.0; QUANTUM]; 2],
         }
@@ -366,6 +402,22 @@ impl Engine {
         self.sfx.master.reset(MASTER * level * level, self.frame);
     }
 
+    /// Switches to the sound of a style tier and palette variant: the effects
+    /// right away, the music at its next bar, without a break.
+    pub fn set_style(&mut self, tier: usize, variant: usize) {
+        self.set_sound_style(SoundStyle::new(tier, variant));
+    }
+
+    pub fn set_sound_style(&mut self, style: SoundStyle) {
+        self.style = style;
+        let playing = self.music.active && !self.music.releasing();
+        self.seq.set_style(style, playing);
+    }
+
+    pub fn sound_style(&self) -> SoundStyle {
+        self.style
+    }
+
     /// Starts the music, fading in over 1.5 s.
     pub fn start_music(&mut self, level: f32, paused: bool) {
         if self.music.active && !self.music.releasing() {
@@ -379,7 +431,8 @@ impl Engine {
                 matches!(v.dest, Dest::Music(_)) && v.start as f64 > now * self.sr
             });
         }
-        self.music.begin(now, self.frame, level, paused);
+        let mix = self.seq.style().timbre().mix;
+        self.music.begin(now, self.frame, level, paused, &mix);
     }
 
     /// Fades the music out and then lets it go.
