@@ -68,6 +68,8 @@ struct DragState {
     /// Where the piece started (in the tray), for the pick-up animation.
     from: (f32, f32, f32),
     start: f64,
+    /// Where the piece would land now; kept between moves so it doesn't flicker on cell edges.
+    target: Option<(i32, i32)>,
 }
 
 /// A pointer held down on the menus.
@@ -511,7 +513,9 @@ impl App {
             gain: if mouse { (1.0, 1.0) } else { TOUCH_GAIN },
             from: tray_piece_position(&self.layout, slot, piece.shape),
             start: self.now,
+            target: None,
         });
+        self.update_target();
         self.scene.hidden_slot = Some(slot);
         self.scene.flying = None;
         self.audio.play(Sfx::Pickup);
@@ -563,6 +567,7 @@ impl App {
         d.y = (d.y + (y - d.py) * d.gain.1).max(-h / 2.0).min(self.layout.height - h / 2.0);
         d.px = x;
         d.py = y;
+        self.update_target();
         self.dirty = true;
     }
 
@@ -629,19 +634,23 @@ impl App {
         }
     }
 
-    /// Where the dragged piece would land: the closest spot near it where it fits.
-    fn snap_target(&self, d: &DragState) -> Option<(i32, i32)> {
-        self.game.tray[d.slot]?;
+    /// Moves the drag target to the closest spot near the dragged piece where it fits.
+    fn update_target(&mut self) {
+        let Some(d) = &self.drag else { return };
         let l = &self.layout;
-        nearest_fit((d.y - l.board_y) / l.cell, (d.x - l.board_x) / l.cell, |r, c| self.game.can_place(d.slot, r, c))
+        let target = self.game.tray[d.slot].and_then(|_| nearest_fit((d.y - l.board_y) / l.cell, (d.x - l.board_x) / l.cell, d.target, |r, c| self.game.can_place(d.slot, r, c)));
+        if let Some(d) = &mut self.drag {
+            d.target = target;
+        }
     }
 
     fn drag_view(&self, now: f64) -> Option<DragView> {
         let d = self.drag.as_ref()?;
         let piece = self.game.tray[d.slot]?;
-        let t = ((now - d.start) / PICKUP_MS).clamp(0.0, 1.0) as f32;
+        // Ease out, so the picked-up piece catches up with the finger quickly.
+        let t = 1.0 - (1.0 - ((now - d.start) / PICKUP_MS).clamp(0.0, 1.0) as f32).powi(3);
         let lerp = |a: f32, b: f32| a + (b - a) * t;
-        let target = self.snap_target(d).map(|(r, c)| (r, c, preview_lines(&self.game.board, piece.shape, r, c)));
+        let target = d.target.map(|(r, c)| (r, c, preview_lines(&self.game.board, piece.shape, r, c)));
         Some(DragView { piece, slot: d.slot, x: lerp(d.from.0, d.x), y: lerp(d.from.1, d.y), cell: lerp(d.from.2, self.layout.cell), target })
     }
 
@@ -650,7 +659,7 @@ impl App {
         let Some(d) = self.drag.take() else { return };
         self.trail = None;
         self.scene.hidden_slot = None;
-        let target = if cancelled { None } else { self.snap_target(&d) };
+        let target = if cancelled { None } else { d.target };
         if let Some((r, c)) = target {
             self.commit(d.slot, r, c);
         } else if let Some(view) = view {

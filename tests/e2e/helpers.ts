@@ -1,7 +1,7 @@
 import { type Page, expect } from '@playwright/test';
 
 /** Touch drags move the piece faster than the finger (TOUCH_GAIN in src/input.rs). */
-export const TOUCH_GAIN = { x: 1.25, y: 1.5 };
+export const TOUCH_GAIN = { x: 1.3, y: 1.3 };
 
 /** Opens the game and collects page errors. */
 export async function open(page: Page, query = '?seed=12345&reset') {

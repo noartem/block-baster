@@ -29,7 +29,7 @@ const BASE = `http://localhost:${PORT}/`;
 const FPS = 30;
 const STEP = 1000 / FPS;
 /** Touch drags move the piece faster than the finger (TOUCH_GAIN in src/input.rs). */
-const TOUCH_GAIN = { x: 1.25, y: 1.5 };
+const TOUCH_GAIN = { x: 1.3, y: 1.3 };
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true };
 
 /** Virtual clock: time only moves when `__step(ms)` is called. */
