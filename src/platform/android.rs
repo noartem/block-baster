@@ -84,6 +84,67 @@ impl Platform for Android {
     }
 }
 
+/// Reads the four `int` sides of an object, by getter (`WindowInsets`) or by field (`android.graphics.Insets`).
+fn sides(env: &mut JNIEnv, obj: &JObject, names: [&str; 4], fields: bool) -> jni::errors::Result<Insets> {
+    let mut side = |name: &str| {
+        let value = if fields { env.get_field(obj, name, "I") } else { env.call_method(obj, name, "()I", &[]) };
+        value.and_then(|v| v.i()).map(|v| v.max(0) as f32)
+    };
+    Ok(Insets { top: side(names[0])?, right: side(names[1])?, bottom: side(names[2])?, left: side(names[3])? })
+}
+
+/// The system bars and cutout as the window manager has them (Android 11+). Unlike the
+/// view's insets, this doesn't depend on the UI thread having laid the window out yet.
+fn metrics_insets() -> Option<Insets> {
+    if AndroidApp::sdk_version() < 30 {
+        return None;
+    }
+    with_activity(|env, activity| {
+        let wm = env.call_method(activity, "getWindowManager", "()Landroid/view/WindowManager;", &[])?.l()?;
+        let metrics = env.call_method(&wm, "getCurrentWindowMetrics", "()Landroid/view/WindowMetrics;", &[])?.l()?;
+        let insets = env.call_method(&metrics, "getWindowInsets", "()Landroid/view/WindowInsets;", &[])?.l()?;
+        let bars = env.call_static_method("android/view/WindowInsets$Type", "systemBars", "()I", &[])?.i()?;
+        let cutout = env.call_static_method("android/view/WindowInsets$Type", "displayCutout", "()I", &[])?.i()?;
+        let both = env.call_method(&insets, "getInsets", "(I)Landroid/graphics/Insets;", &[JValue::Int(bars | cutout)])?.l()?;
+        sides(env, &both, ["top", "right", "bottom", "left"], true)
+    })
+}
+
+/// The insets the decor view last received; `None` until it has been laid out.
+fn view_insets() -> Option<Insets> {
+    with_activity(|env, activity| {
+        let win = env.call_method(activity, "getWindow", "()Landroid/view/Window;", &[])?.l()?;
+        let decor = env.call_method(&win, "getDecorView", "()Landroid/view/View;", &[])?.l()?;
+        let insets = env.call_method(&decor, "getRootWindowInsets", "()Landroid/view/WindowInsets;", &[])?.l()?;
+        if insets.is_null() {
+            return Ok(None);
+        }
+        let names = ["getSystemWindowInsetTop", "getSystemWindowInsetRight", "getSystemWindowInsetBottom", "getSystemWindowInsetLeft"];
+        sides(env, &insets, names, false).map(Some)
+    })
+    .flatten()
+}
+
+/// The status bar's height from the system resources, for when nothing else knows the insets.
+fn status_bar_insets() -> Option<Insets> {
+    with_activity(|env, activity| {
+        let res = env.call_method(activity, "getResources", "()Landroid/content/res/Resources;", &[])?.l()?;
+        let (name, kind, package) = (env.new_string("status_bar_height")?, env.new_string("dimen")?, env.new_string("android")?);
+        let args = [JValue::Object(&name), JValue::Object(&kind), JValue::Object(&package)];
+        let id = env.call_method(&res, "getIdentifier", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I", &args)?.i()?;
+        if id == 0 {
+            return Ok(None);
+        }
+        let top = env.call_method(&res, "getDimensionPixelSize", "(I)I", &[JValue::Int(id)])?.i()?;
+        Ok(Some(Insets { top: top.max(0) as f32, ..Insets::default() }))
+    })
+    .flatten()
+}
+
+fn max_insets(a: Insets, b: Insets) -> Insets {
+    Insets { top: a.top.max(b.top), right: a.right.max(b.right), bottom: a.bottom.max(b.bottom), left: a.left.max(b.left) }
+}
+
 struct AndroidHost {
     app: AndroidApp,
 }
@@ -91,23 +152,6 @@ struct AndroidHost {
 impl Host for AndroidHost {
     /// The status and navigation bars (and any display cutout) cover the edges of the window.
     fn insets(&self, window: &Window) -> Insets {
-        let from_view = with_activity(|env, activity| {
-            let win = env.call_method(activity, "getWindow", "()Landroid/view/Window;", &[])?.l()?;
-            let decor = env.call_method(&win, "getDecorView", "()Landroid/view/View;", &[])?.l()?;
-            let insets = env.call_method(&decor, "getRootWindowInsets", "()Landroid/view/WindowInsets;", &[])?.l()?;
-            if insets.is_null() {
-                return Ok(None);
-            }
-            let mut side = |name: &str| env.call_method(&insets, name, "()I", &[]).and_then(|v| v.i()).map(|v| v.max(0) as f32);
-            Ok(Some(Insets {
-                top: side("getSystemWindowInsetTop")?,
-                right: side("getSystemWindowInsetRight")?,
-                bottom: side("getSystemWindowInsetBottom")?,
-                left: side("getSystemWindowInsetLeft")?,
-            }))
-        })
-        .flatten()
-        .unwrap_or_default();
         // The content rect tells the same when the window isn't drawn edge to edge.
         let size = window.inner_size();
         let rect = self.app.content_rect();
@@ -117,12 +161,10 @@ impl Host for AndroidHost {
             right: (size.width as i32 - rect.right).max(0) as f32,
             bottom: (size.height as i32 - rect.bottom).max(0) as f32,
         };
-        Insets {
-            top: from_view.top.max(from_rect.top),
-            right: from_view.right.max(from_rect.right),
-            bottom: from_view.bottom.max(from_rect.bottom),
-            left: from_view.left.max(from_rect.left),
-        }
+        let (metrics, view) = (metrics_insets(), view_insets());
+        // Some devices report nothing from either, at least at first; the status bar is always shown.
+        let fallback = if metrics.is_none() && view.is_none() { status_bar_insets() } else { None };
+        [metrics, view, fallback].into_iter().flatten().fold(from_rect, max_insets)
     }
 }
 
