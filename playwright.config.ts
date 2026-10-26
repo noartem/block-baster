@@ -12,6 +12,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // The mobile project renders ~1080×2400 pixels on SwiftShader; on CI runners its frames come
+  // 3-5× slower than locally, and the 5 s default for waits left drawn UI and style changes flaky.
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
     baseURL: 'http://localhost:4173',
