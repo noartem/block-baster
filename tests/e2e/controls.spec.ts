@@ -128,7 +128,11 @@ test('the help card scrolls by swiping, even from a button, and by mouse wheel',
   await expectOverlay(page, 'menu');
   await tap(page, 'help');
   await expect.poll(async () => (await state(page)).helpOpen).toBe(true);
-  await page.waitForTimeout(100);
+  // The card measures its height when the help is first drawn, which can take a few slow frames.
+  await expect
+    .poll(async () => (await state(page)).canScroll, { timeout: 3000 })
+    .toBe(true)
+    .catch(() => {});
   test.skip(!(await state(page)).canScroll, 'The help card fits on this screen');
 
   // A swipe starting on the help button scrolls instead of closing the help.
