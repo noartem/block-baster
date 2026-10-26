@@ -195,7 +195,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # The prebuilt FFmpeg that fframes downloads links against an older x264 than Ubuntu ships,
-      # so build FFmpeg from source (cached with the rest of the Rust build below).
+      # so build FFmpeg from source (cached with the rest of the Rust build below, per x264 version).
       FFMPEG_FORCE_BUILD: '1'
     steps:
       - uses: actions/checkout@v5
@@ -207,13 +207,19 @@ jobs:
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install system packages
+        id: system
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq ffmpeg libx264-dev nasm clang libasound2-dev
+          echo "x264=$(dpkg-query -W -f='${Version}' libx264-dev)" >> "$GITHUB_OUTPUT"
+      # FFmpeg built against one x264 doesn't link with another ("undefined symbol:
+      # x264_encoder_open_164"), so a new x264 on the runner starts a fresh cache.
       - uses: Swatinem/rust-cache@v2
         with:
+          key: x264-${{ steps.system.outputs.x264 }}
           workspaces: |
             . -> target
             promo -> target
-      - name: Install system packages
-        run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg libx264-dev nasm clang libasound2-dev
       - uses: actions/download-artifact@v5
         with:
           name: web
